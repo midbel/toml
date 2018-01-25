@@ -49,10 +49,11 @@ func (d DuplicateError) Error() string {
 type UndefinedError struct {
 	item  string
 	label string
+	position scanner.Position
 }
 
 func (u UndefinedError) Error() string {
-	return fmt.Sprintf("undefined %s: %q", u.item, u.label)
+	return fmt.Sprintf("%s. undefined %s: %q", u.position, u.item, u.label)
 }
 
 var booleans = map[string]bool{
@@ -143,7 +144,7 @@ func parseTable(lex *lexer, v reflect.Value) error {
 		}
 		v, ok = listFields(v)[lex.Text()]
 		if !ok {
-			return UndefinedError{"section", lex.Text()}
+			return UndefinedError{"section", lex.Text(), lex.Position}
 		}
 		switch k := v.Kind(); {
 		case k == reflect.Slice && v.IsNil():
@@ -198,7 +199,7 @@ func parseOptions(lex *lexer, v reflect.Value) error {
 func parseOption(lex *lexer, fs map[string]reflect.Value) error {
 	f, ok := fs[strings.Trim(lex.Text(), "\"")]
 	if !ok {
-		return UndefinedError{"option", lex.Text()}
+		return UndefinedError{"option", lex.Text(), lex.Position}
 	}
 	if t := lex.Scan(); t != equal {
 		return MalformedError{"option", equal, t}
