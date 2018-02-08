@@ -23,6 +23,10 @@ const (
 	rightCurlyBracket  = '}'
 )
 
+type Setter interface {
+	Set(string) error
+}
+
 type MalformedError struct {
 	item string
 	want rune
