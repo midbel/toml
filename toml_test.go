@@ -14,6 +14,9 @@ func (a *addr) Set(v string) error {
 	if err != nil {
 		return err
 	}
+	if a == nil {
+		a = new(addr)
+	}
 	*a = addr(*t)
 	return nil
 }
@@ -39,10 +42,10 @@ type conn struct {
 
 func TestDecoderSetterValue(t *testing.T) {
 	s := `
-addr = "127.0.0.1:8000"
+addr = "127.0.0.1:80"
 	`
 	c := struct {
-		Addr addr `toml:"addr"`
+		Addr *addr `toml:"addr"`
 	}{}
 	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
 		t.Fatal(err)

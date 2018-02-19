@@ -53,8 +53,8 @@ func (d DuplicateError) Error() string {
 }
 
 type UndefinedError struct {
-	item  string
-	label string
+	item     string
+	label    string
 	position scanner.Position
 }
 
@@ -267,6 +267,10 @@ func parseArray(lex *lexer, f reflect.Value) error {
 }
 
 func parseSimple(lex *lexer, f reflect.Value, r bool) error {
+	if f.Type().Implements(setter) {
+		s := f.Interface().(Setter)
+		return s.Set(strings.Trim(lex.Text(), "\""))
+	}
 	switch t, k := lex.token, f.Kind(); {
 	case t == scanner.String && k == reflect.String:
 		f.SetString(strings.Trim(lex.Text(), "\""))
@@ -307,7 +311,7 @@ func listFields(v reflect.Value) map[string]reflect.Value {
 		case reflect.Interface:
 			f = f.Elem().Elem()
 		case reflect.Ptr:
-			f = f.Elem()
+			//			f = f.Elem()
 		}
 		z := t.Field(i)
 		switch n := z.Tag.Get("toml"); n {
