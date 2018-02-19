@@ -27,6 +27,8 @@ type Setter interface {
 	Set(string) error
 }
 
+var setter = reflect.TypeOf((*Setter)(nil)).Elem()
+
 type MalformedError struct {
 	item string
 	want rune

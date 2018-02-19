@@ -1,10 +1,22 @@
 package toml
 
 import (
+	"net"
 	"strings"
 	"testing"
 	"time"
 )
+
+type addr net.TCPAddr
+
+func (a *addr) Set(v string) error {
+	t, err := net.ResolveTCPAddr("tcp", v)
+	if err != nil {
+		return err
+	}
+	*a = addr(*t)
+	return nil
+}
 
 type user struct {
 	Name   string `toml:"name"`
@@ -23,6 +35,18 @@ type conn struct {
 	Limit   uint16   `toml:"limit"`
 	Enabled bool     `toml:"enabled"`
 	User    user     `toml:"auth"`
+}
+
+func TestDecoderSetterValue(t *testing.T) {
+	s := `
+addr = "127.0.0.1:8000"
+	`
+	c := struct {
+		Addr addr `toml:"addr"`
+	}{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestDecodeDatetime(t *testing.T) {
