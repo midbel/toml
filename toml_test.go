@@ -14,9 +14,6 @@ func (a *addr) Set(v string) error {
 	if err != nil {
 		return err
 	}
-	if a == nil {
-		a = new(addr)
-	}
 	*a = addr(*t)
 	return nil
 }
@@ -40,7 +37,7 @@ type conn struct {
 	User    user     `toml:"auth"`
 }
 
-func TestDecoderSetterValue(t *testing.T) {
+func TestDecodeSetterValue(t *testing.T) {
 	s := `
 addr = "127.0.0.1:80"
 	`

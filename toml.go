@@ -268,6 +268,9 @@ func parseArray(lex *lexer, f reflect.Value) error {
 
 func parseSimple(lex *lexer, f reflect.Value, r bool) error {
 	if f.Type().Implements(setter) {
+		if f.IsNil() {
+			f.Set(reflect.New(f.Type().Elem()))
+		}
 		s := f.Interface().(Setter)
 		return s.Set(strings.Trim(lex.Text(), "\""))
 	}
