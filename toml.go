@@ -76,8 +76,7 @@ func parse(lex *lexer, v reflect.Value) error {
 		}
 		if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
 			v := reflect.New(f.Type().Elem()).Elem()
-			fs := fields(v)
-			if err := parseBody(lex, fs); err != nil {
+			if err := parseBody(lex, fields(v)); err != nil {
 				return err
 			}
 			f.Set(reflect.Append(f, v))
@@ -90,8 +89,7 @@ func parse(lex *lexer, v reflect.Value) error {
 				f = reflect.Indirect(f)
 				set = true
 			}
-			fs := fields(f)
-			if err := parseBody(lex, fs); err != nil {
+			if err := parseBody(lex, fields(f)); err != nil {
 				return err
 			}
 			if set {
