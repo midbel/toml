@@ -1,11 +1,9 @@
-package main
+package toml
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -29,52 +27,6 @@ const (
 var booleans = map[string]bool{
 	"true":  true,
 	"false": false,
-}
-
-type Certificate struct {
-	Format   string `toml:"type"`
-	Location string `toml:"location"`
-	Server   string `toml:"server"`
-	Policy   string `toml:"policy"`
-	Insecure bool   `toml:"insecure"`
-}
-
-type Config struct {
-	Addr      string       `toml:"address"`
-	Datadir   string       `toml:"datadir"`
-	Strict    bool         `toml:"strict"`
-	Timeout   int          `toml:"timeout"`
-	Instances []uint8      `toml:"instances"`
-	Cert      *Certificate `toml:"certificate"`
-	Pool      []Worker     `toml:"workers"`
-}
-
-type Worker struct {
-	Label string `toml:"name"`
-
-	Group   string `toml:"group"`
-	Apid    uint16 `toml:"apid"`
-	Sources []int  `toml:"sources"`
-
-	Datadir string `toml:"location"`
-	Every   int    `toml:"every"`
-
-	Auto bool `toml:"auto"`
-}
-
-func main() {
-	flag.Parse()
-	f, err := os.Open(flag.Arg(0))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer f.Close()
-
-	c := new(Config)
-	if err := NewDecoder(f).Decode(c); err != nil {
-		log.Println(err)
-	}
-	log.Printf("%+v", c)
 }
 
 type Decoder struct {
@@ -168,6 +120,18 @@ func parseBody(lex *lexer, fs map[string]reflect.Value) error {
 }
 
 func parseOption(lex *lexer, v reflect.Value) error {
+	if t := lex.Peek(); t == dot {
+		lex.Scan()
+		if t := lex.Scan(); t != scanner.Ident {
+			return fmt.Errorf("invalid syntax! expected option, got %s", lex.Text())
+		}
+		fs := fields(v)
+		f, ok := fs[lex.Text()]
+		if !ok {
+			return fmt.Errorf("option %q not recognized", lex.Text())
+		}
+		return parseOption(lex, f)
+	}
 	if t := lex.Scan(); t != equal {
 		return fmt.Errorf("invalid syntax! expected =, got %s", lex.Text())
 	}
