@@ -1,0 +1,59 @@
+# simple.toml: sample file
+address   = "localhost:9754" # listenning address
+strict    = true
+timeout   = 3600             # read/accept timeout
+datadir   = "/var/foobar/"   # directory to archive data
+instances = [0, 1, 2, 255]
+
+# server/client configuration
+[certificate]
+type     = "x509"
+location = "/var/foobar/tls/"
+server   = "foobar.org"
+policy   = "verify"
+insecure = false
+
+[[workers]]
+name    = "hk"
+group   = "239.192.0.1:31002"
+apid    = 906
+sources = []
+location = "/var/foobar/data/906"
+every   = 3600
+auto    = true
+
+[[workers]]
+name    = "hk-foo"
+group   = "239.192.0.1:31002"
+apid    = 907
+sources = [31255001, 31255002, ]
+location = "/var/foobar/data/907/hk"
+every   = 60
+auto    = true
+
+[[workers]]
+name    = "sc-foo"
+group   = "239.192.0.1:31002"
+apid    = 907
+sources = [31255101, 31255102, ]
+location = "/var/foobar/data/907/sc"
+every   = 60
+auto    = true
+
+[[workers]]
+name    = "hk-bar"
+group   = "239.192.0.1:31002"
+apid    = 908
+sources = [31255003, 31255004, 31255005]
+location = "/var/foobar/data/908/hk"
+every   = 300
+auto    = true
+
+[[workers]]
+name    = "sc-bar"
+group   = "239.192.0.1:31002"
+apid    = 908
+sources = [31255103, 31255104, 31255105]
+location = "/var/foobar/data/908/sc"
+every   = 300
+auto    = true
