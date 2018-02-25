@@ -30,6 +30,12 @@ var booleans = map[string]bool{
 	"false": false,
 }
 
+type Setter interface {
+	Set(string) error
+}
+
+var setter = reflect.TypeOf((*Setter)(nil)).Elem()
+
 type Decoder struct {
 	lex *lexer
 }
@@ -203,6 +209,13 @@ func parseTable(lex *lexer, v reflect.Value) error {
 
 func parseSimple(lex *lexer, f reflect.Value) error {
 	v := lex.Text()
+	if f.Type().Implements(setter) {
+		if f.IsNil() {
+			f.Set(reflect.New(f.Type().Elem()))
+		}
+		s := f.Interface().(Setter)
+		return s.Set(strings.Trim(v, "\""))
+	}
 	switch t, k := lex.token, f.Kind(); {
 	case t == scanner.Ident && k == reflect.Bool:
 		f.SetBool(booleans[v])
