@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"text/scanner"
+	"time"
 )
 
 const (
@@ -210,14 +211,24 @@ func parseSimple(lex *lexer, f reflect.Value) error {
 	case t == scanner.Int && isUint(k):
 		v, _ := strconv.ParseUint(v, 0, 64)
 		f.SetUint(v)
-	case t == scanner.Int && isInt(k):
+	case (t == scanner.Int || t == minus) && isInt(k):
+		if t == minus {
+			lex.Scan()
+			v = lex.Text()
+		}
 		v, _ := strconv.ParseInt(v, 0, 64)
+		if t == minus {
+			v = -v
+		}
 		f.SetInt(v)
+	case t == scanner.Int && isTime(f):
+		return parseTime(lex, f)
 	case t == scanner.Float && isFloat(k):
 		v, _ := strconv.ParseFloat(v, 64)
 		f.SetFloat(v)
 	case t == plus:
-	case t == minus:
+		lex.Scan()
+		return parseSimple(lex, f)
 	default:
 		return fmt.Errorf("oups - %s: %s (%s)", v, k, scanner.TokenString(t))
 	}
@@ -288,4 +299,27 @@ func isUint(k reflect.Kind) bool {
 
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
+}
+
+func isTime(v reflect.Value) bool {
+	var z time.Time
+	return v.Type().AssignableTo(reflect.TypeOf(z))
+}
+
+func parseTime(lex *lexer, v reflect.Value) error {
+	var ps []string
+
+	for {
+		ps = append(ps, lex.Text())
+		if lex.Peek() == '\n' {
+			break
+		}
+		lex.Scan()
+	}
+	t, err := time.Parse(time.RFC3339, strings.Join(ps, ""))
+	if err != nil {
+		return err
+	}
+	v.Set(reflect.ValueOf(t))
+	return nil
 }
