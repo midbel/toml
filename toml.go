@@ -2,8 +2,10 @@ package toml
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -34,7 +36,7 @@ type Setter interface {
 	Set(string) error
 }
 
-var setter = reflect.TypeOf((*Setter)(nil)).Elem()
+var setterType = reflect.TypeOf((*Setter)(nil)).Elem()
 
 type Decoder struct {
 	lex *lexer
@@ -53,52 +55,73 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 func (d *Decoder) Decode(v interface{}) error {
+	val := reflect.ValueOf(v)
+	if k := val.Kind(); k != reflect.Ptr {
+		return fmt.Errorf("value is not a ptr (%s)", val.Type())
+	}
 	d.lex.Scan()
-	return parse(d.lex, reflect.ValueOf(v).Elem())
+	return parseDocument(d.lex, val.Elem())
 }
 
-func parse(lex *lexer, v reflect.Value) error {
+func parseDocument(lex *lexer, v reflect.Value) error {
 	fs := fields(v)
 	if lex.token == scanner.Ident {
 		if err := parseBody(lex, fs); err != nil {
 			return err
 		}
 	}
-	for t := lex.Scan(); t != scanner.EOF; t = lex.Scan() {
-		f, ok := fs[lex.Text()]
-		if !ok {
-			return fmt.Errorf("table %q not recognized", lex.Text())
-		}
-		if t := lex.Peek(); t != rightSquareBracket {
-			return fmt.Errorf("invalid syntax! expected ], got %s", lex.Token())
-		}
-		for t := lex.Scan(); t == rightSquareBracket; t = lex.Scan() {
-		}
-		if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
-			v := reflect.New(f.Type().Elem()).Elem()
-			if err := parseBody(lex, fields(v)); err != nil {
+	for !lex.Done() {
+		switch t := lex.Scan(); t {
+		case scanner.Ident:
+			f, ok := fs[lex.Text()]
+			if !ok {
+				return fmt.Errorf("unrecognized table %s", lex.Text())
+			}
+			if err := parse(lex, f); err != nil {
+				return err
+			}
+		case leftSquareBracket:
+			lex.Scan()
+			f, ok := fs[lex.Text()]
+			if !ok {
+				return fmt.Errorf("unrecognized table %s", lex.Text())
+			}
+			v = reflect.New(f.Type().Elem()).Elem()
+			if err := parse(lex, v); err != nil {
 				return err
 			}
 			f.Set(reflect.Append(f, v))
-		} else {
-			var set bool
-
-			z := f
-			if k := z.Kind(); k == reflect.Ptr && z.IsNil() {
-				f = reflect.New(z.Type().Elem())
-				f = reflect.Indirect(f)
-				set = true
-			}
-			if err := parseBody(lex, fields(f)); err != nil {
-				return err
-			}
-			if set {
-				z.Set(f.Addr())
-			}
+		default:
+			return fmt.Errorf("invalid syntax! expected identifier, got %s (%s)", lex.Text(), lex.Position)
 		}
-		lex.Scan()
 	}
 	return nil
+}
+
+func parse(lex *lexer, v reflect.Value) error {
+	z := v
+	if k := v.Kind(); k == reflect.Ptr && v.IsNil() {
+		v = reflect.New(z.Type().Elem())
+		v = reflect.Indirect(v)
+
+		defer z.Set(v.Addr())
+	}
+	fs := fields(v)
+	if t := lex.Peek(); t == dot {
+		lex.Scan()
+		lex.Scan()
+		f, ok := fs[lex.Text()]
+		if !ok {
+			return fmt.Errorf("unrecognized table %s", lex.Text())
+		}
+		return parse(lex, f)
+	}
+	if t := lex.Scan(); t != rightSquareBracket {
+		return fmt.Errorf("invalid syntax! expected ], got %s", lex.Text())
+	}
+	for t := lex.Scan(); t == rightSquareBracket; t = lex.Scan() {
+	}
+	return parseBody(lex, fs)
 }
 
 func parseBody(lex *lexer, fs map[string]reflect.Value) error {
@@ -133,7 +156,7 @@ func parseOption(lex *lexer, v reflect.Value) error {
 		fs := fields(v)
 		f, ok := fs[lex.Text()]
 		if !ok {
-			return fmt.Errorf("option %q not recognized", lex.Text())
+			return fmt.Errorf("unrecognized option: %s (%s)", lex.Text(), lex.Position)
 		}
 		return parseOption(lex, f)
 	}
@@ -207,7 +230,7 @@ func parseTable(lex *lexer, v reflect.Value) error {
 
 func parseSimple(lex *lexer, f reflect.Value) error {
 	v := lex.Text()
-	if f.Type().Implements(setter) {
+	if f.Type().Implements(setterType) {
 		if f.IsNil() {
 			f.Set(reflect.New(f.Type().Elem()))
 		}
