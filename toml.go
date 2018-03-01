@@ -2,10 +2,8 @@ package toml
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -77,6 +75,11 @@ func parseDocument(lex *lexer, v reflect.Value) error {
 			if !ok {
 				return fmt.Errorf("unrecognized table %s", lex.Text())
 			}
+			if t := lex.Peek(); t == dot {
+				if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && f.Len() > 0 {
+					f = f.Index(f.Len() - 1)
+				}
+			}
 			if err := parse(lex, f); err != nil {
 				return err
 			}
@@ -86,11 +89,24 @@ func parseDocument(lex *lexer, v reflect.Value) error {
 			if !ok {
 				return fmt.Errorf("unrecognized table %s", lex.Text())
 			}
-			v = reflect.New(f.Type().Elem()).Elem()
-			if err := parse(lex, v); err != nil {
+			var (
+				z reflect.Value
+				a bool
+			)
+			if t := lex.Peek(); t == dot {
+				if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && f.Len() > 0 {
+					z = f.Index(f.Len() - 1)
+				}
+			} else {
+				z = reflect.New(f.Type().Elem()).Elem()
+				a = true
+			}
+			if err := parse(lex, z); err != nil {
 				return err
 			}
-			f.Set(reflect.Append(f, v))
+			if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && a {
+				f.Set(reflect.Append(f, z))
+			}
 		default:
 			return fmt.Errorf("invalid syntax! expected identifier, got %s (%s)", lex.Text(), lex.Position)
 		}
@@ -106,6 +122,7 @@ func parse(lex *lexer, v reflect.Value) error {
 
 		defer z.Set(v.Addr())
 	}
+
 	fs := fields(v)
 	if t := lex.Peek(); t == dot {
 		lex.Scan()
@@ -113,6 +130,14 @@ func parse(lex *lexer, v reflect.Value) error {
 		f, ok := fs[lex.Text()]
 		if !ok {
 			return fmt.Errorf("unrecognized table %s", lex.Text())
+		}
+		if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
+			z := reflect.New(f.Type().Elem()).Elem()
+			if err := parse(lex, z); err != nil {
+				return err
+			}
+			f.Set(reflect.Append(f, z))
+			return nil
 		}
 		return parse(lex, f)
 	}
