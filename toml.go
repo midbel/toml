@@ -30,6 +30,19 @@ var booleans = map[string]bool{
 	"false": false,
 }
 
+type Duration struct {
+	Value time.Duration
+}
+
+func (d *Duration) Set(v string) error {
+	a, err := time.ParseDuration(v)
+	if err != nil {
+		return err
+	}
+	d.Value = a
+	return nil
+}
+
 type Setter interface {
 	Set(string) error
 }
@@ -153,7 +166,7 @@ func parse(lex *lexer, v reflect.Value) error {
 
 func parseBody(lex *lexer, fs map[string]reflect.Value) error {
 	for t := lex.token; t != leftSquareBracket && t != scanner.EOF; t = lex.Scan() {
-		f, ok := fs[lex.Text()]
+		f, ok := fs[strings.Trim(lex.Text(), "\"")]
 		if !ok {
 			return fmt.Errorf("option %q not recognized", lex.Text())
 		}
@@ -261,11 +274,16 @@ func parseTable(lex *lexer, v reflect.Value) error {
 
 func parseSimple(lex *lexer, f reflect.Value) error {
 	v := lex.Text()
-	if f.Type().Implements(setterType) {
-		if f.IsNil() {
-			f.Set(reflect.New(f.Type().Elem()))
+
+	z := f
+	if k := f.Kind(); k != reflect.Ptr && f.CanAddr() {
+		z = f.Addr()
+	}
+	if z.Type().Implements(setterType) {
+		if z.IsNil() {
+			z.Set(reflect.New(z.Type().Elem()))
 		}
-		s := f.Interface().(Setter)
+		s := z.Interface().(Setter)
 		return s.Set(strings.Trim(v, "\""))
 	}
 	switch t, k := lex.token, f.Kind(); {
