@@ -249,7 +249,11 @@ func parseTable(lex *lexer, v reflect.Value) error {
 			return err
 		}
 	}
-	z.Set(v.Addr())
+	if k := z.Kind(); k == reflect.Ptr {
+		z.Set(v.Addr())
+	} else {
+		z.Set(v)
+	}
 	return nil
 }
 
