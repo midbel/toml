@@ -93,13 +93,15 @@ func parseDocument(lex *lexer, v reflect.Value) error {
 				z reflect.Value
 				a bool
 			)
-			if t := lex.Peek(); t == dot {
-				if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && f.Len() > 0 {
+			if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
+				if t := lex.Peek(); t == dot && f.Len() > 0 {
 					z = f.Index(f.Len() - 1)
+				} else {
+					z = reflect.New(f.Type().Elem()).Elem()
+					a = true
 				}
 			} else {
-				z = reflect.New(f.Type().Elem()).Elem()
-				a = true
+				z = f
 			}
 			if err := parse(lex, z); err != nil {
 				return err
