@@ -406,3 +406,8 @@ func parseTime(lex *lexer, v reflect.Value) error {
 	v.Set(reflect.ValueOf(t))
 	return nil
 }
+
+type value struct {
+	reflect.Value
+	IsSet bool
+}
