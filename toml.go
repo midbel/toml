@@ -290,6 +290,20 @@ func parseSimple(lex *lexer, f reflect.Value) error {
 	case t == scanner.Ident && k == reflect.Bool:
 		f.SetBool(booleans[v])
 	case lex.token == scanner.String && k == reflect.String:
+		if v == "\"\"" {
+			lex.Scan()
+			rs := make([]string, 0)
+			for t := lex.Scan(); !(t == '"' || lex.Done()); t = lex.Scan() {
+				rs = append(rs, lex.Text())
+				switch t := lex.Peek(); t {
+				case '\n':
+					rs = append(rs, "\n")
+				case ' ':
+					rs = append(rs, " ")
+				}
+			}
+			v = strings.Join(rs, "")
+		}
 		f.SetString(strings.Trim(v, "\""))
 	case t == scanner.Int && isUint(k):
 		v, _ := strconv.ParseUint(v, 0, 64)
