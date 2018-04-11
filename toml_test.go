@@ -201,3 +201,30 @@ enabled = true
 		t.Fatal(err)
 	}
 }
+
+func TestDecodeMultilineString(t *testing.T) {
+	s := `
+name = "tomllint"
+version = "0.0"
+summary = "a linter for toml files"
+description = """
+this is an extended description for the toml linter
+
+* parse toml file
+* show syntax error and provide ticks to fix them
+* show syntax warning and provide tricks to solve them
+* really configurable
+
+enjoy the toml linter and the toml format
+"""
+	`
+	c := struct {
+		Name        string `toml:"name"`
+		Release     string `toml:"version"`
+		Summary     string `toml:"summary"`
+		Description string `toml:"description"`
+	}{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+}
