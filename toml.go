@@ -293,16 +293,18 @@ func parseSimple(lex *lexer, f reflect.Value) error {
 		if v == "\"\"" {
 			lex.Scan()
 			rs := make([]string, 0)
+			line := lex.Position.Line
 			for t := lex.Scan(); !(t == '"' || lex.Done()); t = lex.Scan() {
+				if d := lex.Position.Line - line; d > 0 {
+					rs = append(rs, strings.Repeat("\n", d))
+					line = lex.Position.Line
+				}
 				rs = append(rs, lex.Text())
-				switch t := lex.Peek(); t {
-				case '\n':
-					rs = append(rs, "\n")
-				case ' ':
+				if t := lex.Peek(); t == ' ' {
 					rs = append(rs, " ")
 				}
 			}
-			v = strings.Join(rs, "")
+			v = strings.TrimSpace(strings.Join(rs, ""))
 		}
 		f.SetString(strings.Trim(v, "\""))
 	case t == scanner.Int && isUint(k):

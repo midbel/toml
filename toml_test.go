@@ -1,6 +1,7 @@
 package toml
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -203,11 +204,7 @@ enabled = true
 }
 
 func TestDecodeMultilineString(t *testing.T) {
-	s := `
-name = "tomllint"
-version = "0.0"
-summary = "a linter for toml files"
-description = """
+	d := `
 this is an extended description for the toml linter
 
 * parse toml file
@@ -216,7 +213,12 @@ this is an extended description for the toml linter
 * really configurable
 
 enjoy the toml linter and the toml format
-"""
+	`
+	s := `
+name = "tomllint"
+version = "0.0"
+summary = "a linter for toml files"
+description = """%s"""
 	`
 	c := struct {
 		Name        string `toml:"name"`
@@ -224,7 +226,13 @@ enjoy the toml linter and the toml format
 		Summary     string `toml:"summary"`
 		Description string `toml:"description"`
 	}{}
+	s = fmt.Sprintf(s, d)
 	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
 		t.Fatal(err)
+	}
+	if c.Description != d {
+		t.Log("want:", c.Description)
+		t.Log("got:", d)
+		t.Fatal("descriptions does not match")
 	}
 }
