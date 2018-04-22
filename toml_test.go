@@ -231,8 +231,6 @@ description = """%s"""
 		t.Fatal(err)
 	}
 	if c.Description != d {
-		t.Log("want:", c.Description)
-		t.Log("got:", d)
 		t.Fatal("descriptions does not match")
 	}
 }

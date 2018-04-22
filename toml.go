@@ -290,23 +290,7 @@ func parseSimple(lex *lexer, f reflect.Value) error {
 	case t == scanner.Ident && k == reflect.Bool:
 		f.SetBool(booleans[v])
 	case lex.token == scanner.String && k == reflect.String:
-		if v == "\"\"" {
-			lex.Scan()
-			rs := make([]string, 0)
-			line := lex.Position.Line
-			for t := lex.Scan(); !(t == '"' || lex.Done()); t = lex.Scan() {
-				if d := lex.Position.Line - line; d > 0 {
-					rs = append(rs, strings.Repeat("\n", d))
-					line = lex.Position.Line
-				}
-				rs = append(rs, lex.Text())
-				if t := lex.Peek(); t == ' ' {
-					rs = append(rs, " ")
-				}
-			}
-			v = strings.TrimSpace(strings.Join(rs, ""))
-		}
-		f.SetString(strings.Trim(v, "\""))
+		return parseString(lex, f)
 	case t == scanner.Int && isUint(k):
 		v, _ := strconv.ParseUint(v, 0, 64)
 		f.SetUint(v)
@@ -403,6 +387,32 @@ func isFloat(k reflect.Kind) bool {
 func isTime(v reflect.Value) bool {
 	var z time.Time
 	return v.Type().AssignableTo(reflect.TypeOf(z))
+}
+
+func parseString(lex *lexer, v reflect.Value) error {
+	s := lex.Text()
+	if s == "\"\"" {
+		lex.Error = func(s *scanner.Scanner, m string) {}
+		defer func() {
+			lex.Error = nil
+		}()
+		lex.Scan()
+		rs := make([]string, 0)
+		line := lex.Position.Line
+		for t := lex.Scan(); !(t == '"' || lex.Done()); t = lex.Scan() {
+			if d := lex.Position.Line - line; d > 0 {
+				rs = append(rs, strings.Repeat("\n", d))
+				line = lex.Position.Line
+			}
+			rs = append(rs, lex.Text())
+			if t := lex.Peek(); t == ' ' {
+				rs = append(rs, " ")
+			}
+		}
+		s = strings.TrimSpace(strings.Join(rs, ""))
+	}
+	v.SetString(strings.Trim(s, "\""))
+	return nil
 }
 
 func parseTime(lex *lexer, v reflect.Value) error {
