@@ -154,7 +154,7 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 	vs := options(v)
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return invalidSyntax(0, 0)
+			return malformed("invalid key")
 		}
 		f, ok := vs[strings.Trim(d.scanner.Text(), "\"")]
 		if !ok {
@@ -192,6 +192,10 @@ func (d *Decoder) decodeOption(v reflect.Value) error {
 		err = parseSimple(d.scanner, v)
 	}
 	return err
+}
+
+func malformed(m string) {
+	return fmt.Errorf("toml: invalid syntax: %s", m)
 }
 
 func invalidSyntax(w, g rune) error {
