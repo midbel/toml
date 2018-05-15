@@ -27,6 +27,10 @@ type Unmarshaler interface {
 	UnmarshalTOML(*Decoder) error
 }
 
+type UnmarshalerOption interface {
+	UnmarshalOption(*Decoder) error
+}
+
 type Decoder struct {
 	scanner *scan.Scanner
 }
@@ -53,11 +57,13 @@ func (d *Decoder) DecodeElement(v interface{}) error {
 	if k := e.Kind(); k != reflect.Ptr {
 		return fmt.Errorf("expected pointer! got %s", k)
 	}
-	switch d.scanner.Last {
+	switch e := e.Elem(); d.scanner.Last {
 	case scan.Ident:
-		return d.decodeBody(e.Elem())
+		return d.decodeBody(e)
+	case equal:
+		return d.decodeOption(e)
 	default:
-		return fmt.Errorf("can only be called on table element")
+		return fmt.Errorf("can only be called to decode table or option")
 	}
 }
 
@@ -111,6 +117,9 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 		v = x
 	}
 	if v.CanInterface() && v.Type().Implements(unmarshalerType) {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
 		return v.Interface().(Unmarshaler).UnmarshalTOML(d)
 	}
 	if v.CanAddr() {
@@ -134,23 +143,41 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 		if t := d.scanner.Scan(); t != equal {
 			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
 		}
-		var err error
-		switch t := d.scanner.Scan(); t {
-		case lsquare:
-			err = parseInlineArray(d.scanner, f)
-		case lcurly:
-			err = parseInlineTable(d.scanner, f)
-		default:
-			err = parseSimple(d.scanner, f)
-		}
-		if err != nil {
+		if err := d.decodeOption(f); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-var unmarshalerType = reflect.TypeOf((*Unmarshaler)(nil)).Elem()
+func (d *Decoder) decodeOption(v reflect.Value) error {
+	if v.CanInterface() && v.Type().Implements(unmarshalerOptionType) {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		return v.Interface().(UnmarshalerOption).UnmarshalOption(d)
+	}
+	if v.CanAddr() {
+		if v := v.Addr(); v.CanInterface() && v.Type().Implements(unmarshalerOptionType) {
+			return v.Interface().(UnmarshalerOption).UnmarshalOption(d)
+		}
+	}
+	var err error
+	switch t := d.scanner.Scan(); t {
+	case lsquare:
+		err = parseInlineArray(d.scanner, v)
+	case lcurly:
+		err = parseInlineTable(d.scanner, v)
+	default:
+		err = parseSimple(d.scanner, v)
+	}
+	return err
+}
+
+var (
+	unmarshalerType       = reflect.TypeOf((*Unmarshaler)(nil)).Elem()
+	unmarshalerOptionType = reflect.TypeOf((*UnmarshalerOption)(nil)).Elem()
+)
 
 func options(v reflect.Value) map[string]reflect.Value {
 	if k := v.Kind(); k == reflect.Ptr {
@@ -207,7 +234,7 @@ func parseSimple(s *scan.Scanner, f reflect.Value) error {
 		}
 		f.Set(reflect.ValueOf(t))
 	default:
-		return fmt.Errorf("unsupported type: %s (%s)", scan.TokenString(s.Last), k)
+		return fmt.Errorf("toml: unsupported type: %s (%s)", scan.TokenString(s.Last), k)
 	}
 	return nil
 }
