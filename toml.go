@@ -23,6 +23,26 @@ const (
 	comma   = scan.Comma
 )
 
+type UnknownError struct {
+	elem, name string
+}
+
+func (u UnknownError) Error() string {
+	return fmt.Sprintf("toml: %s not recognized: %q!", u.elem, strings.Trim(u.name, "\""))
+}
+
+type SyntaxError struct {
+	want, got rune
+}
+
+func (s SyntaxError) Error() string {
+	if s.want <= 0 && s.got <= 0 {
+		return fmt.Sprintf("toml: invalid syntax")
+	}
+	w, g := scan.TokenString(s.want), scan.TokenString(s.got)
+	return fmt.Sprintf("toml: invalid syntax! want %s but got %s", w, g)
+}
+
 type Unmarshaler interface {
 	UnmarshalTOML(*Decoder) error
 }
@@ -91,7 +111,7 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 		case scan.Ident:
 			v, ok = vs[d.scanner.Text()]
 			if !ok {
-				return fmt.Errorf("unknown table %q", d.scanner.Text())
+				return tableNotFound(d.scanner.Text())
 			}
 		case lsquare:
 			continue
@@ -106,7 +126,7 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 			d.scanner.Scan()
 			return d.decodeElement(options(v))
 		default:
-			return fmt.Errorf("table: invalid syntax! unexpected token %c (%s)", t, scan.TokenString(t))
+			return unexpectedToken(t)
 		}
 	}
 	for t := d.scanner.Last; t == rsquare; t = d.scanner.Scan() {
@@ -134,14 +154,14 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 	vs := options(v)
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return fmt.Errorf("invalid syntax! malformed key")
+			return invalidSyntax(0, 0)
 		}
 		f, ok := vs[strings.Trim(d.scanner.Text(), "\"")]
 		if !ok {
-			return fmt.Errorf("unknown option %q", d.scanner.Text())
+			return optionNotFound(d.scanner.Text())
 		}
 		if t := d.scanner.Scan(); t != equal {
-			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
+			return invalidSyntax(t, equal)
 		}
 		if err := d.decodeOption(f); err != nil {
 			return err
@@ -172,6 +192,22 @@ func (d *Decoder) decodeOption(v reflect.Value) error {
 		err = parseSimple(d.scanner, v)
 	}
 	return err
+}
+
+func invalidSyntax(w, g rune) error {
+	return SyntaxError{w, g}
+}
+
+func unexpectedToken(g rune) error {
+	return fmt.Errorf("toml: invalid syntax! unexpected token %s", scan.TokenString(g))
+}
+
+func tableNotFound(n string) error {
+	return UnknownError{"table", n}
+}
+
+func optionNotFound(n string) error {
+	return UnknownError{"option", n}
 }
 
 var (
