@@ -123,9 +123,9 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 func (d *Decoder) decodeBody(v reflect.Value) error {
 	vs := options(v)
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
-    if t != scan.String && t != scan.Ident && t != scan.Int {
-      return fmt.Errorf("invalid syntax! malformed key")
-    }
+		if t != scan.String && t != scan.Ident && t != scan.Int {
+			return fmt.Errorf("invalid syntax! malformed key")
+		}
 		f, ok := vs[strings.Trim(d.scanner.Text(), "\"")]
 		if !ok {
 			return fmt.Errorf("unknown option %q", d.scanner.Text())

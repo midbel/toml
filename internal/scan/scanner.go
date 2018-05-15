@@ -157,7 +157,11 @@ func (s *Scanner) scanDecimal(r rune) rune {
 	}
 	for {
 		switch r = s.scanRune(); {
-		default:
+		case r == colon:
+			return s.scanTime(r)
+		case r == minus:
+			return s.scanDate(r)
+		case r == '_' || isDigit(r):
 			s.token.WriteRune(r)
 		case r == Dot:
 			s.token.WriteRune(r)
@@ -173,9 +177,50 @@ func (s *Scanner) scanDecimal(r rune) rune {
 				return isDigit(r) || r == minus || r == plus
 			})
 			return Float
-		case !isDigit(r):
+		default:
 			s.offset -= utf8.RuneLen(r)
 			return Int
+		}
+	}
+}
+
+func (s *Scanner) scanDate(r rune) rune {
+	s.token.WriteRune(r)
+	for {
+		switch r = s.scanRune(); {
+		case r == ' ' || r == 'T':
+			r = s.scanTime(r)
+			switch r {
+			case 'Z':
+				s.token.WriteRune(r)
+			case minus:
+				s.scanTime(r)
+			case Time:
+			default:
+				return EOF
+			}
+			return DateTime
+		case isDigit(r) || r == minus:
+			s.token.WriteRune(r)
+		case r == nl || r == EOF:
+			return Date
+		default:
+			return EOF
+		}
+	}
+}
+
+func (s *Scanner) scanTime(r rune) rune {
+	s.token.WriteRune(r)
+	for {
+		switch r = s.scanRune(); {
+		case r == nl || r == EOF:
+			s.offset -= utf8.RuneLen(r)
+			return Time
+		case isDigit(r) || r == Dot || r == colon:
+			s.token.WriteRune(r)
+		default:
+			return r
 		}
 	}
 }
@@ -216,6 +261,9 @@ func (s *Scanner) scanString(r, q rune) rune {
 }
 
 func (s *Scanner) scanRune() rune {
+	if s.offset >= len(s.buffer) {
+		return EOF
+	}
 	r, z := utf8.DecodeRune(s.buffer[s.offset:])
 	if r == utf8.RuneError {
 		return EOF
