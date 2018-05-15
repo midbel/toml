@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/midbel/toml/internal/scan"
 )
@@ -199,6 +200,12 @@ func parseSimple(s *scan.Scanner, f reflect.Value) error {
 	case t == scan.Float && isFloat(k):
 		n, _ := strconv.ParseFloat(v, 64)
 		f.SetFloat(n)
+	case (t == scan.Date || t == scan.DateTime) && isTime(f):
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return err
+		}
+		f.Set(reflect.ValueOf(t))
 	default:
 		return fmt.Errorf("unsupported type: %s (%s)", scan.TokenString(s.Last), k)
 	}
@@ -268,4 +275,9 @@ func isUint(k reflect.Kind) bool {
 
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
+}
+
+func isTime(v reflect.Value) bool {
+	var z time.Time
+	return v.Type().AssignableTo(reflect.TypeOf(z))
 }
