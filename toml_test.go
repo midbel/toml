@@ -38,17 +38,17 @@ type conn struct {
 	User    user     `toml:"auth"`
 }
 
-func TestDecodeSetterValue(t *testing.T) {
-	s := `
-addr = "127.0.0.1:80"
-	`
-	c := struct {
-		Addr *addr `toml:"addr"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
+// func TestDecodeSetterValue(t *testing.T) {
+// 	s := `
+// addr = "127.0.0.1:80"
+// 	`
+// 	c := struct {
+// 		Addr *addr `toml:"addr"`
+// 	}{}
+// 	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 func TestDecodeDatetime(t *testing.T) {
 	s := `
@@ -106,14 +106,14 @@ auth = [
 	if err := NewDecoder(strings.NewReader(s)).Decode(&c1); err != nil {
 		t.Fatal(err)
 	}
-	c2 := struct {
-		Group string
-		Ports [][]int64
-		Auth  []map[string]interface{}
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c2); err != nil {
-		t.Fatal(err)
-	}
+	// c2 := struct {
+	// 	Group string
+	// 	Ports [][]int64
+	// 	Auth  []map[string]interface{}
+	// }{}
+	// if err := NewDecoder(strings.NewReader(s)).Decode(&c2); err != nil {
+	// 	t.Fatal(err)
+	// }
 }
 
 func TestDecoderKeyTypes(t *testing.T) {

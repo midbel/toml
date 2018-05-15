@@ -1,375 +1,261 @@
 package toml
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
-	"text/scanner"
-	"time"
+
+	"github.com/midbel/toml/internal/scan"
 )
 
 const (
-	dot                = '.'
-	comma              = ','
-	minus              = '-'
-	plus               = '+'
-	equal              = '='
-	hash               = '#'
-	leftSquareBracket  = '['
-	rightSquareBracket = ']'
-	leftCurlyBracket   = '{'
-	rightCurlyBracket  = '}'
+	eof     = scan.EOF
+	dot     = scan.Dot
+	lsquare = scan.LeftSquareBracket
+	rsquare = scan.RightSquareBracket
+	lcurly  = scan.LeftCurlyBracket
+	rcurly  = scan.RightCurlyBracket
+	equal   = scan.Equal
+	comma   = scan.Comma
 )
 
-var booleans = map[string]bool{
-	"true":  true,
-	"false": false,
+type Unmarshaler interface {
+	UnmarshalTOML(*Decoder) error
 }
-
-type Duration struct {
-	Value time.Duration
-}
-
-func (d *Duration) Set(v string) error {
-	a, err := time.ParseDuration(v)
-	if err != nil {
-		return err
-	}
-	d.Value = a
-	return nil
-}
-
-type Setter interface {
-	Set(string) error
-}
-
-var setterType = reflect.TypeOf((*Setter)(nil)).Elem()
 
 type Decoder struct {
-	lex *lexer
+	scanner *scan.Scanner
+}
+
+func Unmarshal(bs []byte, v interface{}) error {
+	return NewDecoder(bytes.NewReader(bs)).Decode(v)
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	s := new(scanner.Scanner)
-	s.Init(bufio.NewReader(r))
-	s.Mode = scanner.ScanIdents | scanner.ScanStrings | scanner.ScanFloats | scanner.ScanInts
-
-	if f, ok := r.(*os.File); ok {
-		s.Filename = f.Name()
-	}
-
-	return &Decoder{lex: &lexer{Scanner: s}}
+	s := scan.NewScanner(r)
+	return &Decoder{s}
 }
 
 func (d *Decoder) Decode(v interface{}) error {
-	val := reflect.ValueOf(v)
-	if k := val.Kind(); k != reflect.Ptr {
-		return fmt.Errorf("value is not a ptr (%s)", val.Type())
+	e := reflect.ValueOf(v)
+	if k := e.Kind(); k != reflect.Ptr {
+		return fmt.Errorf("expected pointer! got %s", k)
 	}
-	d.lex.Scan()
-	return parseDocument(d.lex, val.Elem())
+	return d.decode(e.Elem())
 }
 
-func parseDocument(lex *lexer, v reflect.Value) error {
-	fs := fields(v)
-	if lex.token == scanner.Ident {
-		if err := parseBody(lex, fs); err != nil {
-			return err
-		}
+func (d *Decoder) DecodeElement(v interface{}) error {
+	e := reflect.ValueOf(v)
+	if k := e.Kind(); k != reflect.Ptr {
+		return fmt.Errorf("expected pointer! got %s", k)
 	}
-	for !lex.Done() {
-		switch t := lex.Scan(); t {
-		case scanner.Ident:
-			f, ok := fs[lex.Text()]
-			if !ok {
-				return fmt.Errorf("unrecognized table %s", lex.Text())
-			}
-			if t := lex.Peek(); t == dot {
-				if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && f.Len() > 0 {
-					f = f.Index(f.Len() - 1)
-				}
-			}
-			if err := parse(lex, f); err != nil {
-				return err
-			}
-		case leftSquareBracket:
-			lex.Scan()
-			f, ok := fs[lex.Text()]
-			if !ok {
-				return fmt.Errorf("unrecognized table %s", lex.Text())
-			}
-			var (
-				z reflect.Value
-				a bool
-			)
-			if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
-				if t := lex.Peek(); t == dot && f.Len() > 0 {
-					z = f.Index(f.Len() - 1)
-				} else {
-					z = reflect.New(f.Type().Elem()).Elem()
-					a = true
-				}
-			} else {
-				z = f
-			}
-			if err := parse(lex, z); err != nil {
-				return err
-			}
-			if k := f.Kind(); (k == reflect.Slice || k == reflect.Array) && a {
-				f.Set(reflect.Append(f, z))
-			}
-		default:
-			return fmt.Errorf("invalid syntax! expected identifier, got %s (%s)", lex.Text(), lex.Position)
-		}
-	}
-	return nil
-}
-
-func parse(lex *lexer, v reflect.Value) error {
-	z := v
-	if k := v.Kind(); k == reflect.Ptr && v.IsNil() {
-		v = reflect.New(z.Type().Elem())
-		v = reflect.Indirect(v)
-
-		defer z.Set(v.Addr())
-	}
-
-	fs := fields(v)
-	if t := lex.Peek(); t == dot {
-		lex.Scan()
-		lex.Scan()
-		f, ok := fs[lex.Text()]
-		if !ok {
-			return fmt.Errorf("unrecognized table %s", lex.Text())
-		}
-		if k := f.Kind(); k == reflect.Slice || k == reflect.Array {
-			z := reflect.New(f.Type().Elem()).Elem()
-			if err := parse(lex, z); err != nil {
-				return err
-			}
-			f.Set(reflect.Append(f, z))
-			return nil
-		}
-		return parse(lex, f)
-	}
-	if t := lex.Scan(); t != rightSquareBracket {
-		return fmt.Errorf("invalid syntax! expected ], got %s", lex.Text())
-	}
-	for t := lex.Scan(); t == rightSquareBracket; t = lex.Scan() {
-	}
-	return parseBody(lex, fs)
-}
-
-func parseBody(lex *lexer, fs map[string]reflect.Value) error {
-	for t := lex.token; t != leftSquareBracket && t != scanner.EOF; t = lex.Scan() {
-		f, ok := fs[strings.Trim(lex.Text(), "\"")]
-		if !ok {
-			return fmt.Errorf("option %q not recognized", lex.Text())
-		}
-		var set bool
-		z := f
-		if k := z.Kind(); k == reflect.Ptr && z.IsNil() {
-			f = reflect.New(z.Type().Elem())
-			f = reflect.Indirect(f)
-			set = true
-		}
-		if err := parseOption(lex, f); err != nil {
-			return err
-		}
-		if set {
-			z.Set(f.Addr())
-		}
-	}
-	return nil
-}
-
-func parseOption(lex *lexer, v reflect.Value) error {
-	if t := lex.Peek(); t == dot {
-		lex.Scan()
-		if t := lex.Scan(); t != scanner.Ident {
-			return fmt.Errorf("invalid syntax! expected option, got %s", lex.Text())
-		}
-		fs := fields(v)
-		f, ok := fs[lex.Text()]
-		if !ok {
-			return fmt.Errorf("unrecognized option: %s (%s)", lex.Text(), lex.Position)
-		}
-		return parseOption(lex, f)
-	}
-	if t := lex.Scan(); t != equal {
-		return fmt.Errorf("invalid syntax! expected =, got %s", lex.Text())
-	}
-	var err error
-	switch t := lex.Scan(); t {
-	case leftSquareBracket:
-		err = parseArray(lex, v)
-	case leftCurlyBracket:
-		err = parseTable(lex, v)
+	switch d.scanner.Last {
+	case scan.Ident:
+		return d.decodeBody(e.Elem())
 	default:
-		err = parseSimple(lex, v)
+		return fmt.Errorf("can only be called on table element")
 	}
-	return err
 }
 
-func parseArray(lex *lexer, v reflect.Value) error {
-	if k := v.Kind(); !(k == reflect.Array || k == reflect.Slice) {
-		return fmt.Errorf("array like value expected, got %s", k)
+func (d *Decoder) decode(v reflect.Value) error {
+	d.scanner.Scan()
+	if err := d.decodeBody(v); err != nil {
+		return err
 	}
-	for t := lex.Scan(); t != rightSquareBracket; t = lex.Scan() {
-		if t == comma {
-			continue
+	vs := options(v)
+	for t := d.scanner.Scan(); t != scan.EOF; t = d.scanner.Scan() {
+		if err := d.decodeElement(vs); err != nil {
+			return err
 		}
-		f := reflect.New(v.Type().Elem()).Elem()
+	}
+	return nil
+}
 
-		var err error
+func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
+	var (
+		v  reflect.Value
+		ok bool
+	)
+	for t := d.scanner.Last; t != rsquare && t != scan.EOF; t = d.scanner.Scan() {
 		switch t {
-		case leftSquareBracket:
-			err = parseArray(lex, f)
-		case leftCurlyBracket:
-			err = parseTable(lex, f)
+		case scan.Ident:
+			v, ok = vs[d.scanner.Text()]
+			if !ok {
+				return fmt.Errorf("unknown table %q", d.scanner.Text())
+			}
+		case lsquare:
+			continue
+		case scan.Dot:
+			if k := v.Kind(); k == reflect.Slice {
+				if v.Len() == 0 {
+					x := reflect.New(v.Type().Elem()).Elem()
+					v.Set(reflect.Append(v, x))
+				}
+				v = v.Index(v.Len() - 1)
+			}
+			d.scanner.Scan()
+			return d.decodeElement(options(v))
 		default:
-			err = parseSimple(lex, f)
+			return fmt.Errorf("table: invalid syntax! unexpected token %c (%s)", t, scan.TokenString(t))
+		}
+	}
+	for t := d.scanner.Last; t == rsquare; t = d.scanner.Scan() {
+	}
+	if k := v.Kind(); k == reflect.Slice {
+		x := reflect.New(v.Type().Elem()).Elem()
+		defer appendValue(v, x)
+		v = x
+	}
+	if v.CanInterface() && v.Type().Implements(unmarshalerType) {
+		return v.Interface().(Unmarshaler).UnmarshalTOML(d)
+	}
+	if v.CanAddr() {
+		if v := v.Addr(); v.CanInterface() && v.Type().Implements(unmarshalerType) {
+			return v.Interface().(Unmarshaler).UnmarshalTOML(d)
+		}
+	}
+	return d.decodeBody(v)
+}
+
+func (d *Decoder) decodeBody(v reflect.Value) error {
+	vs := options(v)
+	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
+    if t != scan.String && t != scan.Ident && t != scan.Int {
+      return fmt.Errorf("invalid syntax! malformed key")
+    }
+		f, ok := vs[strings.Trim(d.scanner.Text(), "\"")]
+		if !ok {
+			return fmt.Errorf("unknown option %q", d.scanner.Text())
+		}
+		if t := d.scanner.Scan(); t != equal {
+			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
+		}
+		var err error
+		switch t := d.scanner.Scan(); t {
+		case lsquare:
+			err = parseInlineArray(d.scanner, f)
+		case lcurly:
+			err = parseInlineTable(d.scanner, f)
+		default:
+			err = parseSimple(d.scanner, f)
 		}
 		if err != nil {
 			return err
 		}
-		v.Set(reflect.Append(v, f))
 	}
 	return nil
 }
 
-func parseTable(lex *lexer, v reflect.Value) error {
-	z := v
-	if k := z.Kind(); k == reflect.Ptr && z.IsNil() {
-		v = reflect.New(v.Type().Elem())
-		v = reflect.Indirect(v)
-	}
-	if k := v.Kind(); k != reflect.Struct {
-		return fmt.Errorf("struct like value expected, got %s", k)
-	}
-	fs := fields(v)
-	for t := lex.Scan(); t != rightCurlyBracket; t = lex.Scan() {
-		if t == comma {
-			continue
-		}
-		f, ok := fs[lex.Text()]
-		if !ok {
-			return fmt.Errorf("option %s not found", lex.Text())
-		}
-		if err := parseOption(lex, f); err != nil {
-			return err
-		}
-	}
-	if k := z.Kind(); k == reflect.Ptr {
-		z.Set(v.Addr())
-	} else {
-		z.Set(v)
-	}
-	return nil
-}
+var unmarshalerType = reflect.TypeOf((*Unmarshaler)(nil)).Elem()
 
-func parseSimple(lex *lexer, f reflect.Value) error {
-	v := lex.Text()
-
-	z := f
-	if k := f.Kind(); k != reflect.Ptr && f.CanAddr() {
-		z = f.Addr()
-	}
-	if z.Type().Implements(setterType) {
-		if z.IsNil() {
-			z.Set(reflect.New(z.Type().Elem()))
-		}
-		s := z.Interface().(Setter)
-		return s.Set(strings.Trim(v, "\""))
-	}
-	switch t, k := lex.token, f.Kind(); {
-	case t == scanner.Ident && k == reflect.Bool:
-		f.SetBool(booleans[v])
-	case lex.token == scanner.String && k == reflect.String:
-		f.SetString(strings.Trim(v, "\""))
-	case t == scanner.Int && isUint(k):
-		v, _ := strconv.ParseUint(v, 0, 64)
-		f.SetUint(v)
-	case (t == scanner.Int || t == minus) && isInt(k):
-		if t == minus {
-			lex.Scan()
-			v = lex.Text()
-		}
-		v, _ := strconv.ParseInt(v, 0, 64)
-		if t == minus {
-			v = -v
-		}
-		f.SetInt(v)
-	case t == scanner.Int && isTime(f):
-		return parseTime(lex, f)
-	case t == scanner.Float && isFloat(k):
-		v, _ := strconv.ParseFloat(v, 64)
-		f.SetFloat(v)
-	case t == plus:
-		lex.Scan()
-		return parseSimple(lex, f)
-	default:
-		return fmt.Errorf("oups - %s: %s (%s)", v, k, scanner.TokenString(t))
-	}
-	return nil
-}
-
-func fields(v reflect.Value) map[string]reflect.Value {
-	fs := make(map[string]reflect.Value)
+func options(v reflect.Value) map[string]reflect.Value {
 	if k := v.Kind(); k == reflect.Ptr {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
 		v = v.Elem()
 	}
+	if k := v.Kind(); k != reflect.Struct {
+		return nil
+	}
+	fs := make(map[string]reflect.Value)
 	for i, t := 0, v.Type(); i < v.NumField(); i++ {
 		f := v.Field(i)
 		if !f.CanSet() {
 			continue
 		}
-		z := t.Field(i)
-		switch n := z.Tag.Get("toml"); n {
-		case "-":
-			continue
-		case "":
-			fs[strings.ToLower(z.Name)] = f
-		default:
+		j := t.Field(i)
+		switch n := j.Tag.Get("toml"); {
+		case n == "":
+			fs[strings.ToLower(j.Name)] = f
+		case n != "":
 			fs[n] = f
 		}
 	}
 	return fs
 }
 
-type lexer struct {
-	*scanner.Scanner
-	token rune
+func appendValue(a, v reflect.Value) {
+	a.Set(reflect.Append(a, v))
 }
 
-func (l *lexer) Done() bool {
-	return l.token == scanner.EOF
+func parseSimple(s *scan.Scanner, f reflect.Value) error {
+	v := strings.Trim(s.Text(), "\"")
+	switch t, k := s.Last, f.Kind(); {
+	case t == scan.Ident && k == reflect.Bool:
+		n, _ := strconv.ParseBool(v)
+		f.SetBool(n)
+	case t == scan.String && k == reflect.String:
+		f.SetString(v)
+	case t == scan.Int && isInt(k):
+		n, _ := strconv.ParseInt(v, 0, 64)
+		f.SetInt(n)
+	case t == scan.Int && isUint(k):
+		n, _ := strconv.ParseUint(v, 0, 64)
+		f.SetUint(n)
+	case t == scan.Float && isFloat(k):
+		n, _ := strconv.ParseFloat(v, 64)
+		f.SetFloat(n)
+	default:
+		return fmt.Errorf("unsupported type: %s (%s)", scan.TokenString(s.Last), k)
+	}
+	return nil
 }
 
-func (l *lexer) Token() string {
-	return scanner.TokenString(l.token)
-}
-
-func (l *lexer) Text() string {
-	return l.TokenText()
-}
-
-func (l *lexer) Scan() rune {
-	l.token = l.Scanner.Scan()
-	if l.token == hash {
-		p := l.Scanner.Position
-		for {
-			if l.Position.Line > p.Line {
-				break
-			}
-			l.token = l.Scan()
+func parseInlineArray(s *scan.Scanner, f reflect.Value) error {
+	for t := s.Scan(); t != rsquare && t != eof; t = s.Scan() {
+		if t == comma {
+			continue
+		}
+		var err error
+		x := reflect.New(f.Type().Elem()).Elem()
+		switch t {
+		case lcurly:
+			err = parseInlineTable(s, x)
+		case lsquare:
+			err = parseInlineArray(s, x)
+		default:
+			err = parseSimple(s, x)
+		}
+		f.Set(reflect.Append(f, x))
+		if err != nil {
+			return err
 		}
 	}
-	return l.token
+	return nil
+}
+
+func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
+	vs := options(f)
+	for t := s.Scan(); t != rcurly && t != eof; t = s.Scan() {
+		if t == comma {
+			continue
+		}
+		var err error
+
+		x, ok := vs[s.Text()]
+		if !ok {
+			return fmt.Errorf("unknown option %q", s.Text())
+		}
+		if t := s.Scan(); t != equal {
+			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
+		}
+		switch t := s.Scan(); t {
+		case lcurly:
+			err = parseInlineTable(s, x)
+		case lsquare:
+			err = parseInlineArray(s, x)
+		default:
+			err = parseSimple(s, x)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func isInt(k reflect.Kind) bool {
@@ -382,58 +268,4 @@ func isUint(k reflect.Kind) bool {
 
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
-}
-
-func isTime(v reflect.Value) bool {
-	var z time.Time
-	return v.Type().AssignableTo(reflect.TypeOf(z))
-}
-
-func parseString(lex *lexer, v reflect.Value) error {
-	s := lex.Text()
-	if s == "\"\"" {
-		lex.Error = func(s *scanner.Scanner, m string) {}
-		defer func() {
-			lex.Error = nil
-		}()
-		lex.Scan()
-		rs := make([]string, 0)
-		line := lex.Position.Line
-		for t := lex.Scan(); !(t == '"' || lex.Done()); t = lex.Scan() {
-			if d := lex.Position.Line - line; d > 0 {
-				rs = append(rs, strings.Repeat("\n", d))
-				line = lex.Position.Line
-			}
-			rs = append(rs, lex.Text())
-			if t := lex.Peek(); t == ' ' {
-				rs = append(rs, " ")
-			}
-		}
-		s = strings.TrimSpace(strings.Join(rs, ""))
-	}
-	v.SetString(strings.Trim(s, "\""))
-	return nil
-}
-
-func parseTime(lex *lexer, v reflect.Value) error {
-	var ps []string
-
-	for {
-		ps = append(ps, lex.Text())
-		if lex.Peek() == '\n' {
-			break
-		}
-		lex.Scan()
-	}
-	t, err := time.Parse(time.RFC3339, strings.Join(ps, ""))
-	if err != nil {
-		return err
-	}
-	v.Set(reflect.ValueOf(t))
-	return nil
-}
-
-type value struct {
-	reflect.Value
-	IsSet bool
 }
