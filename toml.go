@@ -194,7 +194,7 @@ func (d *Decoder) decodeOption(v reflect.Value) error {
 	return err
 }
 
-func malformed(m string) {
+func malformed(m string) error {
 	return fmt.Errorf("toml: invalid syntax: %s", m)
 }
 
