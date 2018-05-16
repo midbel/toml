@@ -10,7 +10,7 @@ func TestScannerNumber(t *testing.T) {
 		Value string
 		Want  rune
 	}{
-		{Value: "+99", Want: Int},
+		{Value: "+99", Want: Uint},
 		{Value: "42", Want: Int},
 		{Value: "0", Want: Int},
 		{Value: "-17", Want: Int},

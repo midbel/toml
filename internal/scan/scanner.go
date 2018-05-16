@@ -13,6 +13,7 @@ const (
 	String
 	Char
 	Int
+	Uint
 	Float
 	Decimal
 	Punct
@@ -119,6 +120,9 @@ func (s *Scanner) Scan() rune {
 		s.Last = s.scanDecimal(r)
 	case r == plus:
 		s.Last = s.scanDecimal(s.scanRune())
+		if s.Last != Float {
+			s.Last = Uint
+		}
 	default:
 		s.Last = r
 	}
