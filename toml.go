@@ -261,10 +261,10 @@ func parseSimple(s *scan.Scanner, f reflect.Value) error {
 	case t == scan.Int && isInt(k):
 		n, _ := strconv.ParseInt(v, 0, 64)
 		f.SetInt(n)
-	case t == scan.Int && isUint(k):
+	case (t == scan.Int || t == scan.Uint) && isUint(k):
 		n, _ := strconv.ParseUint(v, 0, 64)
 		f.SetUint(n)
-	case t == scan.Float && isFloat(k):
+	case (t == scan.Float || t == scan.Int || t == scan.Uint) && isFloat(k):
 		n, _ := strconv.ParseFloat(v, 64)
 		f.SetFloat(n)
 	case (t == scan.Date || t == scan.DateTime) && isTime(f):
