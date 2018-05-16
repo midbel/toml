@@ -5,6 +5,70 @@ import (
 	"testing"
 )
 
+func TestScannerSeries(t *testing.T) {
+	data := []struct {
+		Value string
+		Want  []rune
+	}{
+		{
+			Value: "option",
+			Want:  []rune{Ident},
+		},
+		{
+			Value: "option = 3.14",
+			Want:  []rune{Ident, Equal, Float},
+		},
+		{
+			Value: "option = {x = 3.14, y = 1.3}",
+			Want: []rune{
+				Ident,
+				Equal,
+				LeftCurlyBracket,
+				Ident,
+				Equal,
+				Float,
+				Comma,
+				Ident,
+				Equal,
+				Float,
+				RightCurlyBracket,
+			},
+		},
+		{
+			Value: "option = {x = 3, y = 1}",
+			Want: []rune{
+				Ident,
+				Equal,
+				LeftCurlyBracket,
+				Ident,
+				Equal,
+				Int,
+				Comma,
+				Ident,
+				Equal,
+				Int,
+				RightCurlyBracket,
+			},
+		},
+	}
+	const err = "%d) fail to scan %q at position %d: want %s, got %q (prev: %s, %s)"
+	for i, d := range data {
+		s := NewScanner(strings.NewReader(d.Value))
+		var (
+			p   rune
+			str string
+		)
+		for j, k := 0, s.Scan(); k != EOF; j, k = j+1, s.Scan() {
+			if k != d.Want[j] {
+				w, g, v := TokenString(d.Want[j]), TokenString(k), TokenString(p)
+				t.Errorf(err, i+1, d.Value, j, w, g, v, str)
+				break
+			}
+			p, str = d.Want[i], s.Text()
+		}
+	}
+}
+
 func TestScannerNumber(t *testing.T) {
 	data := []struct {
 		Value string

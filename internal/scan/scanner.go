@@ -140,7 +140,8 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 		r = s.scanRune()
 		if !accept(r) {
 			s.offset -= utf8.RuneLen(r)
-			break
+			return r
+			// break
 		}
 		if r != plus {
 			s.token.WriteRune(r)
@@ -174,6 +175,8 @@ func (s *Scanner) scanDecimal(r rune) rune {
 				s.scanNumber(r, func(r rune) bool {
 					return isDigit(r) || r == minus || r == plus
 				})
+			} else {
+				s.offset -= utf8.RuneLen(r)
 			}
 			return Float
 		case r == 'e' || r == 'E':
