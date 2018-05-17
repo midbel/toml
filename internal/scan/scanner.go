@@ -181,11 +181,10 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 	for {
 		r = s.scanRune()
 		if !accept(r) {
-			if r == EOF {
-				break
+			if r != EOF {
+				s.offset -= utf8.RuneLen(r)
 			}
-			s.offset -= utf8.RuneLen(r)
-			return r
+			break
 		}
 		if r != plus {
 			s.token.WriteRune(r)
