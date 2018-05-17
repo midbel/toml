@@ -50,6 +50,22 @@ func TestScannerSeries(t *testing.T) {
 				RightCurlyBracket,
 			},
 		},
+		{
+			Value: "option = {name = \"midbel\", email=\"midbel@foobar.org\"}",
+			Want: []rune{
+				Ident,
+				Equal,
+				LeftCurlyBracket,
+				Ident,
+				Equal,
+				String,
+				Comma,
+				Ident,
+				Equal,
+				String,
+				RightCurlyBracket,
+			},
+		},
 	}
 	const err = "%d) fail to scan %q at position %d: want %s, got %q (prev: %s, %s)"
 	for i, d := range data {
