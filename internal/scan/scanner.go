@@ -64,7 +64,37 @@ func (s *Scanner) Text() string {
 	return s.token.String()
 }
 
-func (s *Scanner) Peek() rune {
+// func (s *Scanner) Peek() rune {
+// 	offset := s.offset
+// 	for {
+// 		r, z := utf8.DecodeRune(s.buffer[offset:])
+// 		if r == utf8.RuneError {
+// 			return EOF
+// 		}
+// 		offset += z
+// 		switch {
+// 		case isWhitespace(r):
+// 		case r == hash:
+// 			for r != nl {
+// 				r, z := utf8.DecodeRune(s.buffer[offset:])
+// 				if r == utf8.RuneError {
+// 					return EOF
+// 				}
+// 				offset += z
+// 			}
+// 		case isString(r):
+// 			return String
+// 		case isIdent(r):
+// 			return Ident
+// 		case isDigit(r):
+// 			return Decimal
+// 		default:
+// 			return r
+// 		}
+// 	}
+// }
+
+func (s *Scanner) peek() rune {
 	offset := s.offset
 	for {
 		r, z := utf8.DecodeRune(s.buffer[offset:])
@@ -82,15 +112,22 @@ func (s *Scanner) Peek() rune {
 				}
 				offset += z
 			}
-		case isString(r):
-			return String
-		case isIdent(r):
-			return Ident
-		case isDigit(r):
-			return Decimal
 		default:
 			return r
 		}
+	}
+}
+
+func (s *Scanner) Peek() rune {
+	switch r := s.peek(); {
+	case isString(r):
+		return String
+	case isIdent(r):
+		return Ident
+	case isDigit(r):
+		return Decimal
+	default:
+		return r
 	}
 }
 
@@ -144,9 +181,11 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 	for {
 		r = s.scanRune()
 		if !accept(r) {
+			if r == EOF {
+				break
+			}
 			s.offset -= utf8.RuneLen(r)
 			return r
-			// break
 		}
 		if r != plus {
 			s.token.WriteRune(r)
@@ -157,7 +196,7 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 
 func (s *Scanner) scanDecimal(r rune) rune {
 	s.token.WriteRune(r)
-	switch n := s.Peek(); n {
+	switch n := s.peek(); n {
 	case 'x':
 		return s.scanNumber(s.scanRune(), isHexRune)
 	case 'o':

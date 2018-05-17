@@ -87,38 +87,41 @@ func TestScannerSeries(t *testing.T) {
 	}
 }
 
-func TestScannerNumber(t *testing.T) {
+func TestScannerNumbers(t *testing.T) {
 	data := []struct {
 		Value string
 		Want  rune
+		Match bool
 	}{
 		{Value: "+99", Want: Uint},
-		{Value: "42", Want: Int},
-		{Value: "0", Want: Int},
-		{Value: "-17", Want: Int},
-		{Value: "1_000", Want: Int},
+		{Value: "42", Want: Int, Match: true},
+		{Value: "0", Want: Int, Match: true},
+		{Value: "-17", Want: Int, Match: true},
+		{Value: "1_000", Want: Int, Match: true},
 		{Value: "5_349_221", Want: Int},
-		{Value: "0xDEADBEEF", Want: Int},
-		{Value: "0xdeadbeef", Want: Int},
-		{Value: "0xdead_beef", Want: Int},
-		{Value: "0o01234567", Want: Int},
-		{Value: "0o755", Want: Int},
-		{Value: "0b11010110", Want: Int},
+		{Value: "0xDEADBEEF", Want: Int, Match: true},
+		{Value: "0xdeadbeef", Want: Int, Match: true},
+		{Value: "0xdead_beef", Want: Int, Match: true},
+		{Value: "0o01234567", Want: Int, Match: true},
+		{Value: "0o755", Want: Int, Match: true},
+		{Value: "0b11010110", Want: Int, Match: true},
 		{Value: "+1.0", Want: Float},
-		{Value: "3.1415", Want: Float},
-		{Value: "-0.01", Want: Float},
+		{Value: "3.1415", Want: Float, Match: true},
+		{Value: "-0.01", Want: Float, Match: true},
 		{Value: "5e+22", Want: Float},
-		{Value: "1e6", Want: Float},
-		{Value: "-2E-2", Want: Float},
-		{Value: "6.626e-34", Want: Float},
+		{Value: "1e6", Want: Float, Match: true},
+		{Value: "-2E-2", Want: Float, Match: true},
+		{Value: "6.626e-34", Want: Float, Match: true},
 		{Value: "9_224_617.445_991_228_313", Want: Float},
 	}
 	var s Scanner
 	for i, d := range data {
 		s.Reset(strings.NewReader(d.Value))
-		// s := NewScanner(strings.NewReader(d.Value))
 		if r := s.Scan(); r != d.Want {
 			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(r))
+		}
+		if d.Match && d.Value != s.Text() {
+			t.Errorf("%d) scanning %q failed! got %q", i+1, d.Value, s.Text())
 		}
 	}
 }
