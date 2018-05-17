@@ -68,8 +68,10 @@ func TestScannerSeries(t *testing.T) {
 		},
 	}
 	const err = "%d) fail to scan %q at position %d: want %s, got %q (prev: %s, %s)"
+	var s Scanner
 	for i, d := range data {
-		s := NewScanner(strings.NewReader(d.Value))
+		s.Reset(strings.NewReader(d.Value))
+		// s := NewScanner(strings.NewReader(d.Value))
 		var (
 			p   rune
 			str string
@@ -111,8 +113,10 @@ func TestScannerNumber(t *testing.T) {
 		{Value: "6.626e-34", Want: Float},
 		{Value: "9_224_617.445_991_228_313", Want: Float},
 	}
+	var s Scanner
 	for i, d := range data {
-		s := NewScanner(strings.NewReader(d.Value))
+		s.Reset(strings.NewReader(d.Value))
+		// s := NewScanner(strings.NewReader(d.Value))
 		if r := s.Scan(); r != d.Want {
 			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(r))
 		}
@@ -134,8 +138,10 @@ func TestScannerDateTime(t *testing.T) {
 		{Value: "07:32:00", Want: Time},
 		{Value: "00:32:00.999999", Want: Time},
 	}
+	var s Scanner
 	for i, d := range data {
-		s := NewScanner(strings.NewReader(d.Value))
+		s.Reset(strings.NewReader(d.Value))
+		// s := NewScanner(strings.NewReader(d.Value))
 		if r := s.Scan(); r != d.Want {
 			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(r))
 		}

@@ -54,15 +54,9 @@ type Scanner struct {
 }
 
 func NewScanner(r io.Reader) *Scanner {
-	var (
-		w bytes.Buffer
-		s Scanner
-	)
-	n, _ := io.Copy(&w, r)
-	if n > 0 {
-		s.buffer = make([]byte, n)
-		copy(s.buffer, w.Bytes())
-	}
+	var s Scanner
+	s.Reset(r)
+
 	return &s
 }
 
@@ -127,6 +121,17 @@ func (s *Scanner) Scan() rune {
 		s.Last = r
 	}
 	return s.Last
+}
+
+func (s *Scanner) Reset(r io.Reader) {
+	var w bytes.Buffer
+
+	n, _ := io.Copy(&w, r)
+	if n > 0 {
+		s.buffer = make([]byte, n)
+		copy(s.buffer, w.Bytes())
+	}
+	s.offset = 0
 }
 
 func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
