@@ -20,6 +20,7 @@ const (
 	DateTime
 	Date
 	Time
+	Invalid
 )
 
 const (
@@ -364,6 +365,7 @@ var tokenTypes = map[rune]string{
 	DateTime: "datetime",
 	Date:     "date",
 	Time:     "time",
+	Invalid:  "invalid",
 }
 
 func TokenString(r rune) string {
