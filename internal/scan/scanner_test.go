@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -97,11 +98,11 @@ func TestScannerNumbers(t *testing.T) {
 		{Value: "42", Want: Int, Match: true},
 		{Value: "0", Want: Int, Match: true},
 		{Value: "-17", Want: Int, Match: true},
-		{Value: "1_000", Want: Int, Match: true},
+		{Value: "1_000", Want: Int},
 		{Value: "5_349_221", Want: Int},
 		{Value: "0xDEADBEEF", Want: Int, Match: true},
 		{Value: "0xdeadbeef", Want: Int, Match: true},
-		{Value: "0xdead_beef", Want: Int, Match: true},
+		{Value: "0xdead_beef", Want: Int},
 		{Value: "0o01234567", Want: Int, Match: true},
 		{Value: "0o755", Want: Int, Match: true},
 		{Value: "0b11010110", Want: Int, Match: true},
@@ -122,6 +123,18 @@ func TestScannerNumbers(t *testing.T) {
 		}
 		if d.Match && d.Value != s.Text() {
 			t.Errorf("%d) scanning %q failed! got %q", i+1, d.Value, s.Text())
+		}
+		var err error
+		switch d.Want {
+		case Float:
+			_, err = strconv.ParseFloat(s.Text(), 64)
+		case Int:
+			_, err = strconv.ParseInt(s.Text(), 0, 64)
+		case Uint:
+			_, err = strconv.ParseUint(s.Text(), 0, 64)
+		}
+		if err != nil {
+			t.Errorf("%d) scanning %q failed! %s", i+1, d.Value, err)
 		}
 	}
 }

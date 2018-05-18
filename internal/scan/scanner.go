@@ -177,7 +177,9 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 			return isDigit(r) || r == '_'
 		}
 	}
-	s.token.WriteRune(r)
+	if r != '_' {
+		s.token.WriteRune(r)
+	}
 	for {
 		r = s.scanRune()
 		if !accept(r) {
@@ -186,7 +188,7 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 			}
 			break
 		}
-		if r != plus {
+		if !(r == plus || r == '_') {
 			s.token.WriteRune(r)
 		}
 	}
@@ -194,7 +196,9 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 }
 
 func (s *Scanner) scanDecimal(r rune) rune {
-	s.token.WriteRune(r)
+	if r != '_' {
+		s.token.WriteRune(r)
+	}
 	switch n := s.peek(); n {
 	case 'x':
 		return s.scanNumber(s.scanRune(), isHexRune)
@@ -209,7 +213,8 @@ func (s *Scanner) scanDecimal(r rune) rune {
 			return s.scanTime(r)
 		case r == minus:
 			return s.scanDate(r)
-		case r == '_' || isDigit(r):
+		case r == '_':
+		case isDigit(r):
 			s.token.WriteRune(r)
 		case r == Dot:
 			s.token.WriteRune(r)
