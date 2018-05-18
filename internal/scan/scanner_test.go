@@ -6,6 +6,56 @@ import (
 	"testing"
 )
 
+func TestScannerIdents(t *testing.T) {
+	data := []struct {
+		Value string
+		Want  rune
+	}{
+		{Value: "true", Want: Ident},
+		{Value: "false", Want: Ident},
+		{Value: "nan", Want: Ident},
+		{Value: "+nan", Want: Ident},
+		{Value: "-nan", Want: Ident},
+		{Value: "inf", Want: Ident},
+		{Value: "+inf", Want: Ident},
+		{Value: "-inf", Want: Ident},
+	}
+	var s Scanner
+	for i, d := range data {
+		s.Reset(strings.NewReader(d.Value))
+		if k := s.Scan(); k != d.Want {
+			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(k))
+		}
+	}
+}
+
+func TestScannerStrings(t *testing.T) {
+	data := []struct {
+		Value string
+		Want  rune
+	}{
+		{Value: `"hello world"`, Want: String},
+		{Value: `'hello world'`, Want: String},
+		{Value: `"hello world`, Want: Invalid},
+		{Value: `'hello world`, Want: Invalid},
+		{Value: `"""the quick brown fox jumps over the lazy dog"""`, Want: String},
+		{Value: `'''the quick brown fox jumps over the lazy dog'''`, Want: String},
+		{Value: `"""the quick brown fox jumps over the lazy dog`, Want: Invalid},
+		{Value: `'''the quick brown fox jumps over the lazy dog`, Want: Invalid},
+		{Value: `"""the quick brown fox jumps over the lazy dog'''`, Want: Invalid},
+		{Value: `'''the quick brown fox jumps over the lazy dog"""`, Want: Invalid},
+		{Value: `"""the quick brown fox\njumps over\nthe lazy dog"""`, Want: String},
+		{Value: `'''the quick brown fox\njumps over\nthe lazy dog'''`, Want: String},
+	}
+	var s Scanner
+	for i, d := range data {
+		s.Reset(strings.NewReader(d.Value))
+		if k := s.Scan(); k != d.Want {
+			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(k))
+		}
+	}
+}
+
 func TestScannerSeries(t *testing.T) {
 	data := []struct {
 		Value string
