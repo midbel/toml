@@ -43,14 +43,6 @@ func (s SyntaxError) Error() string {
 	return fmt.Sprintf("toml: invalid syntax! want %s but got %s", w, g)
 }
 
-type Unmarshaler interface {
-	UnmarshalTOML(*Decoder) error
-}
-
-type UnmarshalerOption interface {
-	UnmarshalOption(*Decoder) error
-}
-
 type Decoder struct {
 	scanner *scan.Scanner
 }
@@ -136,17 +128,6 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 		defer appendValue(v, x)
 		v = x
 	}
-	if v.CanInterface() && v.Type().Implements(unmarshalerType) {
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
-		return v.Interface().(Unmarshaler).UnmarshalTOML(d)
-	}
-	if v.CanAddr() {
-		if v := v.Addr(); v.CanInterface() && v.Type().Implements(unmarshalerType) {
-			return v.Interface().(Unmarshaler).UnmarshalTOML(d)
-		}
-	}
 	return d.decodeBody(v)
 }
 
@@ -171,17 +152,6 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 }
 
 func (d *Decoder) decodeOption(v reflect.Value) error {
-	if v.CanInterface() && v.Type().Implements(unmarshalerOptionType) {
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
-		return v.Interface().(UnmarshalerOption).UnmarshalOption(d)
-	}
-	if v.CanAddr() {
-		if v := v.Addr(); v.CanInterface() && v.Type().Implements(unmarshalerOptionType) {
-			return v.Interface().(UnmarshalerOption).UnmarshalOption(d)
-		}
-	}
 	var err error
 	switch t := d.scanner.Scan(); t {
 	case lsquare:
@@ -213,11 +183,6 @@ func tableNotFound(n string) error {
 func optionNotFound(n string) error {
 	return UnknownError{"option", n}
 }
-
-var (
-	unmarshalerType       = reflect.TypeOf((*Unmarshaler)(nil)).Elem()
-	unmarshalerOptionType = reflect.TypeOf((*UnmarshalerOption)(nil)).Elem()
-)
 
 func options(v reflect.Value) map[string]reflect.Value {
 	if k := v.Kind(); k == reflect.Ptr {
