@@ -215,8 +215,28 @@ func appendValue(a, v reflect.Value) {
 	a.Set(reflect.Append(a, v))
 }
 
+type Setter interface{
+	Set(string) error
+}
+
+var setterType = reflect.TypeOf((*Setter)(nil)).Elem()
+
+func asSetter(f reflect.Value, v string) (bool, error) {
+	if f.CanAddr() {
+		return asSetter(f.Addr(), v)
+	}
+	if f.CanInterface() && f.Type().Implements(setterType) {
+		s := f.Interface().(Setter)
+		return true, s.Set(v)
+	}
+	return false, nil
+}
+
 func parseSimple(s *scan.Scanner, f reflect.Value) error {
 	v := strings.Trim(s.Text(), "\"")
+	if ok, err := asSetter(f, v); ok {
+		return err
+	}
 	switch t, k := s.Last, f.Kind(); {
 	case t == scan.Ident && k == reflect.Bool:
 		n, _ := strconv.ParseBool(v)
