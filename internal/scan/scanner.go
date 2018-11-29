@@ -407,7 +407,7 @@ func isIdentRune(r rune) bool {
 }
 
 func isWhitespace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\n'
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }
 
 func isHexRune(r rune) bool {

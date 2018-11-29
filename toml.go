@@ -215,7 +215,7 @@ func appendValue(a, v reflect.Value) {
 	a.Set(reflect.Append(a, v))
 }
 
-type Setter interface{
+type Setter interface {
 	Set(string) error
 }
 
