@@ -233,7 +233,15 @@ func asSetter(f reflect.Value, v string) (bool, error) {
 }
 
 func parseSimple(s *scan.Scanner, f reflect.Value) error {
-	v := strings.Trim(s.Text(), "\"")
+	var v string
+	if s.Last != scan.String {
+		v = strings.Trim(s.Text(), "\"")
+	} else {
+		v = strings.TrimFunc(s.Text(), func(r rune) bool {
+			return r == '\'' || r == '"'
+		})
+	}
+
 	if ok, err := asSetter(f, v); ok {
 		return err
 	}
