@@ -202,6 +202,8 @@ func options(v reflect.Value) map[string]reflect.Value {
 		}
 		j := t.Field(i)
 		switch n := j.Tag.Get("toml"); {
+		case n == "-":
+			continue
 		case n == "":
 			fs[strings.ToLower(j.Name)] = f
 		case n != "":
