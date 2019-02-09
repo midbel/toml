@@ -131,16 +131,19 @@ func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
 	return d.decodeBody(v)
 }
 
+func trimQuotes(s string) string {
+	return strings.TrimFunc(s, func(r rune) bool {
+		return r == '\'' || r == '"'
+	})
+}
+
 func (d *Decoder) decodeBody(v reflect.Value) error {
 	vs := options(v)
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
 			return malformed("invalid key")
 		}
-		k := strings.TrimFunc(d.scanner.Text(), func(r rune) bool {
-			return r == '\'' || r == '"'
-		})
-		f, ok := vs[k]
+		f, ok := vs[trimQuotes(d.scanner.Text())]
 		if !ok {
 			return optionNotFound(d.scanner.Text())
 		}
@@ -242,9 +245,7 @@ func parseSimple(s *scan.Scanner, f reflect.Value) error {
 	if s.Last != scan.String {
 		v = strings.Trim(s.Text(), "\"")
 	} else {
-		v = strings.TrimFunc(s.Text(), func(r rune) bool {
-			return r == '\'' || r == '"'
-		})
+		v = trimQuotes(s.Text())
 	}
 
 	if ok, err := asSetter(f, v); ok {

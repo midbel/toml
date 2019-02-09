@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"unicode/utf8"
 )
 
@@ -64,36 +65,6 @@ func NewScanner(r io.Reader) *Scanner {
 func (s *Scanner) Text() string {
 	return s.token.String()
 }
-
-// func (s *Scanner) Peek() rune {
-// 	offset := s.offset
-// 	for {
-// 		r, z := utf8.DecodeRune(s.buffer[offset:])
-// 		if r == utf8.RuneError {
-// 			return EOF
-// 		}
-// 		offset += z
-// 		switch {
-// 		case isWhitespace(r):
-// 		case r == hash:
-// 			for r != nl {
-// 				r, z := utf8.DecodeRune(s.buffer[offset:])
-// 				if r == utf8.RuneError {
-// 					return EOF
-// 				}
-// 				offset += z
-// 			}
-// 		case isString(r):
-// 			return String
-// 		case isIdent(r):
-// 			return Ident
-// 		case isDigit(r):
-// 			return Decimal
-// 		default:
-// 			return r
-// 		}
-// 	}
-// }
 
 func (s *Scanner) peek() rune {
 	offset := s.offset
@@ -161,15 +132,43 @@ func (s *Scanner) Scan() rune {
 	return s.Last
 }
 
-func (s *Scanner) Reset(r io.Reader) {
-	var w bytes.Buffer
-
-	n, _ := io.Copy(&w, r)
-	if n > 0 {
-		s.buffer = make([]byte, n)
-		copy(s.buffer, w.Bytes())
+func (s *Scanner) scanString(r, q rune) rune {
+	skipQuote := func() {
+		for i := 0; i < 2; i++ {
+			s.scanRune()
+		}
 	}
-	s.offset = 0
+	s.token.WriteRune(r)
+	var isMulti bool
+	if n := s.peek(); n == '\'' || n == '"' {
+		isMulti = true
+		skipQuote()
+	}
+	for {
+		r = s.scanRune()
+		switch r {
+		case EOF:
+			return r
+		case '\\':
+			r = s.scanRune()
+		}
+		s.token.WriteRune(r)
+		if r == q {
+			break
+		}
+	}
+	if isMulti {
+		skipQuote()
+	}
+	return String
+}
+
+func (s *Scanner) Reset(r io.Reader) (err error) {
+	s.buffer, err = ioutil.ReadAll(r)
+	if err == nil && len(s.buffer) == 0 {
+		err = io.EOF
+	}
+	return err
 }
 
 func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
@@ -293,27 +292,6 @@ func (s *Scanner) scanIdent(r rune) rune {
 		}
 		s.token.WriteRune(r)
 	}
-}
-
-func (s *Scanner) scanString(r, q rune) rune {
-	s.token.WriteRune(r)
-	for {
-		r = s.scanRune()
-		switch r {
-		case EOF:
-			return r
-		case '\\':
-			r = s.scanRune()
-		}
-		s.token.WriteRune(r)
-		if r == q {
-			break
-		}
-	}
-	if n := s.Peek(); n == String {
-		return s.scanString(s.scanRune(), q)
-	}
-	return String
 }
 
 func (s *Scanner) scanRune() rune {
