@@ -137,7 +137,10 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
 			return malformed("invalid key")
 		}
-		f, ok := vs[strings.Trim(d.scanner.Text(), "\"")]
+		k := strings.TrimFunc(d.scanner.Text(), func(r rune) bool {
+			return r == '\'' || r == '"'
+		})
+		f, ok := vs[k]
 		if !ok {
 			return optionNotFound(d.scanner.Text())
 		}

@@ -50,6 +50,37 @@ type conn struct {
 // 	}
 // }
 
+func TestDecodeSkipField(t *testing.T) {
+	s := `
+name = "TestDecodeSkipField"
+	`
+	c := struct {
+		Name    string `toml:"name"`
+		Package string `toml:"-"`
+	}{Package: "toml"}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Package != "toml" {
+		t.Fatal("Package field has been modified")
+	}
+}
+
+func TestDecodeQuottedKey(t *testing.T) {
+	s := `
+"double" = "quotation mark"
+'single' = "single quote"
+	`
+	c := struct {
+		Double string `toml:"double"`
+		Single string `toml:"single"`
+	}{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Logf("%+v", c)
+		t.Fatal(err)
+	}
+}
+
 func TestDecodeDatetime(t *testing.T) {
 	s := `
 odt1 = 1979-05-27T07:32:00Z
