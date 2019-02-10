@@ -13,12 +13,12 @@ func TestScannerIdents(t *testing.T) {
 	}{
 		{Value: "true", Want: Ident},
 		{Value: "false", Want: Ident},
-		{Value: "nan", Want: Ident},
-		{Value: "+nan", Want: Ident},
-		{Value: "-nan", Want: Ident},
-		{Value: "inf", Want: Ident},
-		{Value: "+inf", Want: Ident},
-		{Value: "-inf", Want: Ident},
+		{Value: "nan", Want: Float},
+		{Value: "+nan", Want: Float},
+		{Value: "-nan", Want: Float},
+		{Value: "inf", Want: Float},
+		{Value: "+inf", Want: Float},
+		{Value: "-inf", Want: Float},
 	}
 	var s Scanner
 	for i, d := range data {
@@ -170,9 +170,11 @@ func TestScannerNumbers(t *testing.T) {
 		s.Reset(strings.NewReader(d.Value))
 		if r := s.Scan(); r != d.Want {
 			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(r))
+			continue
 		}
 		if d.Match && d.Value != s.Text() {
 			t.Errorf("%d) scanning %q failed! got %q", i+1, d.Value, s.Text())
+			continue
 		}
 		var err error
 		switch d.Want {
@@ -210,6 +212,7 @@ func TestScannerDateTime(t *testing.T) {
 		// s := NewScanner(strings.NewReader(d.Value))
 		if r := s.Scan(); r != d.Want {
 			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(r))
+			continue
 		}
 		if s.Text() != d.Value {
 			t.Errorf("%d) scanning failed! want %s, got %s", i+1, d.Value, s.Text())
