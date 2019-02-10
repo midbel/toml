@@ -138,16 +138,30 @@ func (s *Scanner) Scan() rune {
 }
 
 func (s *Scanner) scanString(r, q rune) rune {
-	skipQuote := func() {
+	if r != q {
+		return Invalid
+	}
+	basic := r == '"'
+	skipQuote := func(trim bool) {
 		for i := 0; i < 2; i++ {
 			s.scanRune()
+		}
+		if !trim {
+			return
+		}
+		for {
+			r := s.scanRune()
+			if !isWhitespace(r) {
+				s.token.WriteRune(r)
+				break
+			}
 		}
 	}
 	s.token.WriteRune(r)
 	var isMulti bool
 	if n := s.peek(); n == '\'' || n == '"' {
 		isMulti = true
-		skipQuote()
+		skipQuote(true)
 	}
 	for {
 		r = s.scanRune()
@@ -156,6 +170,9 @@ func (s *Scanner) scanString(r, q rune) rune {
 			return Invalid
 		case '\\':
 			r = s.scanRune()
+			if r == '\n' && basic {
+				continue
+			}
 		}
 		s.token.WriteRune(r)
 		if r == q {
@@ -163,7 +180,7 @@ func (s *Scanner) scanString(r, q rune) rune {
 		}
 	}
 	if isMulti {
-		skipQuote()
+		skipQuote(false)
 	}
 	return String
 }

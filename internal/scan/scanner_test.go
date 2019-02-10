@@ -29,6 +29,29 @@ func TestScannerIdents(t *testing.T) {
 	}
 }
 
+func TestBasicStrings(t *testing.T) {
+	str := `
+"""
+The quick brown \
+fox jumps over \
+the lazy dog."""`
+	var s Scanner
+	s.Reset(strings.NewReader(str))
+	if k := s.Scan(); k != String {
+		t.Errorf("fail parsing string. Want string, got %s", TokenString(k))
+		return
+	}
+	w := `"The quick brown fox jumps over the lazy dog."`
+	if g := s.Text(); g != w {
+		t.Errorf("want %s", w)
+		t.Errorf("got  %s", g)
+	}
+}
+
+func TestLiteralStrings(t *testing.T) {
+
+}
+
 func TestScannerStrings(t *testing.T) {
 	data := []struct {
 		Value string
