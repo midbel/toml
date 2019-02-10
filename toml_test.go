@@ -38,17 +38,23 @@ type conn struct {
 	User    user     `toml:"auth"`
 }
 
-// func TestDecodeSetterValue(t *testing.T) {
-// 	s := `
-// addr = "127.0.0.1:80"
-// 	`
-// 	c := struct {
-// 		Addr *addr `toml:"addr"`
-// 	}{}
-// 	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-// 		t.Fatal(err)
-// 	}
-// }
+func TestDecodeNestedTags(t *testing.T) {
+	s := `
+name = "TestDecodeNestedTags"
+
+[access]
+accept = ["root", "www-data"]
+reject = ["nobody"]
+	`
+	c := struct {
+		Name   string
+		Accept []string `toml:"access>accept"`
+		Reject []string `toml:"access>reject"`
+	}{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestDecodeSkipField(t *testing.T) {
 	s := `
