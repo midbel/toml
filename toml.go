@@ -138,6 +138,9 @@ func trimQuotes(s string) string {
 }
 
 func (d *Decoder) decodeBody(v reflect.Value) error {
+	if v.Kind() == reflect.Map {
+		return d.decodeBodyMap(v)
+	}
 	vs := options(v)
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
@@ -153,6 +156,26 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 		if err := d.decodeOption(f); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (d *Decoder) decodeBodyMap(v reflect.Value) error {
+	v.Set(reflect.MakeMap(v.Type()))
+
+	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
+		if t != scan.String && t != scan.Ident && t != scan.Int {
+			return malformed("invalid key")
+		}
+		k := trimQuotes(d.scanner.Text())
+		f := reflect.New(v.Type().Elem()).Elem()
+		if t := d.scanner.Scan(); t != equal {
+			return invalidSyntax(t, equal)
+		}
+		if err := d.decodeOption(f); err != nil {
+			return err
+		}
+		v.SetMapIndex(reflect.ValueOf(k), f)
 	}
 	return nil
 }

@@ -235,8 +235,7 @@ enabled = true
 }
 
 func TestDecodeMultilineString(t *testing.T) {
-	d := `
-this is an extended description for the toml linter
+	d := `this is an extended description for the toml linter
 
 * parse toml file
 * show syntax error and provide ticks to fix them
@@ -263,5 +262,35 @@ description = """%s"""
 	}
 	if c.Description != d {
 		t.Fatal("descriptions does not match")
+	}
+}
+
+func TestDecodeIntoMap(t *testing.T) {
+	s := `
+title = "hello world"
+date  = 2019-02-10T15:40:00Z
+number = 10
+	`
+	var c map[string]interface{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := c["title"]; ok {
+		_, ok := v.(string)
+		if !ok {
+			t.Fatal("title string not set")
+		}
+	}
+	if v, ok := c["date"]; ok {
+		_, ok := v.(time.Time)
+		if !ok {
+			t.Fatal("date time not set")
+		}
+	}
+	if v, ok := c["number"]; ok {
+		_, ok := v.(int)
+		if !ok {
+			t.Fatal("number int not set")
+		}
 	}
 }
