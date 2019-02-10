@@ -294,3 +294,18 @@ number = 10
 		}
 	}
 }
+
+func TestDecodeFromSlices(t *testing.T) {
+	s := `
+[[user]]
+name = "roger lamotte"
+passwd = "tomlrules"
+[[user]]
+name = "pierre dubois"
+passwd = "gorules"
+	`
+	var cs []user
+	if err := NewDecoder(strings.NewReader(s)).Decode(&cs); err != nil {
+		t.Fatal(err)
+	}
+}
