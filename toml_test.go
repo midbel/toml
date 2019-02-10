@@ -86,11 +86,19 @@ func TestDecodeDatetime(t *testing.T) {
 odt1 = 1979-05-27T07:32:00Z
 odt2 = 1979-05-27T00:32:00-07:00
 odt3 = 1979-05-27T00:32:00.999999-07:00
+odt4 = 1979-05-27 00:32:00
+odt5 = 1979-05-27
+ldt1 = 1979-05-27T07:32:00
+ldt2 = 1979-05-27T00:32:00.999999
   `
 	c := struct {
 		Odt1 time.Time `toml:"odt1"`
 		Odt2 time.Time `toml:"odt2"`
 		Odt3 time.Time `toml:"odt3"`
+		Odt4 time.Time `toml:"odt4"`
+		Odt5 time.Time `toml:"odt5"`
+		Ldt1 time.Time `toml:"ldt1"`
+		Ldt2 time.Time `toml:"ldt2"`
 	}{}
 	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
 		t.Fatal(err)

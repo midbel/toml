@@ -290,15 +290,33 @@ func parseSimple(s *scan.Scanner, f reflect.Value) error {
 		n, _ := strconv.ParseFloat(v, 64)
 		f.SetFloat(n)
 	case (t == scan.Date || t == scan.DateTime) && isTime(f):
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			return err
+		var set bool
+		for _, df := range dateFormats {
+			t, err := time.Parse(df, v)
+			if err == nil {
+				f.Set(reflect.ValueOf(t))
+				set = true
+				break
+			}
 		}
-		f.Set(reflect.ValueOf(t))
+		if !set {
+			return fmt.Errorf("no date format match %s", v)
+		}
 	default:
 		return fmt.Errorf("toml: unsupported type: %s (%s)", scan.TokenString(s.Last), k)
 	}
 	return nil
+}
+
+var dateFormats = []string{
+	time.RFC3339,
+	"2006-01-02 15:04:05.000Z",
+	"2006-01-02 15:04:05Z",
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04:05.000",
+	"2006-01-02 15:04:05.000",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
 }
 
 func parseInlineArray(s *scan.Scanner, f reflect.Value) error {
