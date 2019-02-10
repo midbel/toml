@@ -212,7 +212,7 @@ func options(v reflect.Value) map[string]reflect.Value {
 			continue
 		case n == "":
 			fs[strings.ToLower(j.Name)] = f
-		case n != "":
+		default:
 			fs[n] = f
 		}
 	}

@@ -117,6 +117,11 @@ func (s *Scanner) Scan() rune {
 	switch {
 	case isIdent(r):
 		s.Last = s.scanIdent(r)
+		switch s.token.String() {
+		case "nan", "+nan", "-nan", "inf", "+inf", "-inf":
+			s.Last = Float
+		default:
+		}
 	case isString(r):
 		s.Last = s.scanString(r, r)
 	case isDigit(r) || r == minus:
@@ -148,7 +153,7 @@ func (s *Scanner) scanString(r, q rune) rune {
 		r = s.scanRune()
 		switch r {
 		case EOF:
-			return r
+			return Invalid
 		case '\\':
 			r = s.scanRune()
 		}
@@ -168,6 +173,7 @@ func (s *Scanner) Reset(r io.Reader) (err error) {
 	if err == nil && len(s.buffer) == 0 {
 		err = io.EOF
 	}
+	s.offset = 0
 	return err
 }
 
@@ -284,14 +290,15 @@ func (s *Scanner) scanIdent(r rune) rune {
 	s.token.WriteRune(r)
 	for {
 		if r = s.scanRune(); r == EOF {
-			return EOF
+			break
 		}
 		if !isIdentRune(r) {
 			s.offset -= utf8.RuneLen(r)
-			return Ident
+			break
 		}
 		s.token.WriteRune(r)
 	}
+	return Ident
 }
 
 func (s *Scanner) scanRune() rune {
