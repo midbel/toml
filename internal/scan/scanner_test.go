@@ -57,6 +57,8 @@ func TestScannerStrings(t *testing.T) {
 		Value string
 		Want  rune
 	}{
+		{Value: `""`, Want: String},
+		{Value: `''`, Want: String},
 		{Value: `"hello world"`, Want: String},
 		{Value: `'hello world'`, Want: String},
 		{Value: `"hello world`, Want: Invalid},
