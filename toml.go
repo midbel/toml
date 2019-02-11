@@ -338,6 +338,10 @@ func parseInlineArray(s *scan.Scanner, f reflect.Value) error {
 		if err != nil {
 			return err
 		}
+		if r := s.Peek(); r != rsquare && r != comma {
+			// return invalidSyntax(r)
+			return fmt.Errorf("array: invalid syntax! got %c want %c or %c", r, rsquare, comma)
+		}
 	}
 	return nil
 }
@@ -356,7 +360,7 @@ func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
 		}
 		if t := s.Scan(); t != equal {
 			// return invalidSyntax(equal, t)
-			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
+			return fmt.Errorf("table: invalid syntax! got %c want %c", t, equal)
 		}
 		switch t := s.Scan(); t {
 		case lcurly:
@@ -371,7 +375,7 @@ func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
 		}
 		if r := s.Peek(); r != rcurly && r != comma {
 			// return invalidSyntax(r)
-			return fmt.Errorf("body: invalid syntax! got %c want %c or %c", r, rcurly, comma)
+			return fmt.Errorf("table: invalid syntax! got %c want %c or %c", r, rcurly, comma)
 		}
 	}
 	return nil
