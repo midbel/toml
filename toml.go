@@ -355,6 +355,7 @@ func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
 			return fmt.Errorf("unknown option %q", s.Text())
 		}
 		if t := s.Scan(); t != equal {
+			// return invalidSyntax(equal, t)
 			return fmt.Errorf("body: invalid syntax! got %c want %c", t, equal)
 		}
 		switch t := s.Scan(); t {
@@ -367,6 +368,10 @@ func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
 		}
 		if err != nil {
 			return err
+		}
+		if r := s.Peek(); r != rcurly && r != comma {
+			// return invalidSyntax(r)
+			return fmt.Errorf("body: invalid syntax! got %c want %c or %c", r, rcurly, comma)
 		}
 	}
 	return nil

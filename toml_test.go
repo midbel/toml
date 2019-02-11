@@ -38,6 +38,43 @@ type conn struct {
 	User    user     `toml:"auth"`
 }
 
+func TestDecoderFailures(t *testing.T) {
+	s1 := `
+name = "hello world",
+control = {
+	accept = ["a", "b"],
+	reject = ["c", "d"],
+}
+	`
+	s2 := `
+name = "hello world"
+control = {
+	accept = ["a", "b"]
+	reject = ["c", "d"]
+}
+	`
+	s3 := `
+name = #invalid
+control = {
+	accept = ["a", "b"]
+	reject = ["c", "d"]
+}
+	`
+	c := struct {
+		Name    string
+		Control struct {
+			Accept []string
+			Reject []string
+		}
+	}{}
+	for _, s := range []string{s1, s2, s3} {
+		if err := NewDecoder(strings.NewReader(s)).Decode(&c); err == nil {
+			t.Log(s)
+			t.Error("failure expected but string has been decoded properly")
+		}
+	}
+}
+
 func TestDecodeNestedTags(t *testing.T) {
 	s := `
 name = "TestDecodeNestedTags"

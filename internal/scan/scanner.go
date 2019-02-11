@@ -190,7 +190,7 @@ func (s *Scanner) scanString(r, q rune) rune {
 		}
 	}
 	if isMulti {
-		if r := skipQuote(true); r == Invalid {
+		if r := skipQuote(false); r == Invalid {
 			return r
 		}
 	}
