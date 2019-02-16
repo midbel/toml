@@ -142,11 +142,18 @@ func (d *Decoder) decodeBody(v reflect.Value) error {
 		return d.decodeBodyMap(v)
 	}
 	vs := options(v)
+	seen := make(map[string]struct{})
 	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
 		if t != scan.String && t != scan.Ident && t != scan.Int {
 			return malformed("invalid key")
 		}
-		f, ok := vs[trimQuotes(d.scanner.Text())]
+		k := trimQuotes(d.scanner.Text())
+		if _, ok := seen[k]; ok {
+			return fmt.Errorf("duplicate option %s", k)
+		}
+		seen[k] = struct{}{}
+
+		f, ok := vs[k]
 		if !ok {
 			return optionNotFound(d.scanner.Text())
 		}
@@ -211,6 +218,14 @@ func tableNotFound(n string) error {
 
 func optionNotFound(n string) error {
 	return UnknownError{"option", n}
+}
+
+type settableValue struct {
+	Value reflect.Value
+	Set   bool
+
+	Table  string
+	Option string
 }
 
 func options(v reflect.Value) map[string]reflect.Value {

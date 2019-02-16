@@ -67,6 +67,10 @@ control = {
 	reject = ["c" "d"],
 }
 	`
+	s5 := `
+name = "hellorules101"
+name = "worldrules101"
+	`
 	c := struct {
 		Name    string
 		Control struct {
@@ -74,7 +78,7 @@ control = {
 			Reject []string
 		}
 	}{}
-	for _, s := range []string{s1, s2, s3, s4} {
+	for _, s := range []string{s1, s2, s3, s4, s5} {
 		if err := NewDecoder(strings.NewReader(s)).Decode(&c); err == nil {
 			t.Log(s)
 			t.Error("failure expected but string has been decoded properly")
