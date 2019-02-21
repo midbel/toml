@@ -49,7 +49,31 @@ the lazy dog."""`
 }
 
 func TestLiteralStrings(t *testing.T) {
-
+	multilines := `'''
+The first newline is
+trimmed in raw strings.
+   All other whitespace
+   is preserved.
+'''`
+	data := []string{
+		`'C:\Users\nodejs\templates'`,
+		`'\\ServerX\admin$\system32\'`,
+		`'Tom "Dubs" Preston-Werner'`,
+		`'<\i\c*\s*>'`,
+		`''I [dw]on't need \d{2} apples'''`,
+		multilines,
+	}
+	var s Scanner
+	for i, d := range data {
+		s.Reset(strings.NewReader(d))
+		if k := s.Scan(); k != String {
+			t.Errorf("%d) parsing %q failed! want string got %q", i+1, d, TokenString(k))
+			continue
+		}
+		if s.Text() != d {
+			t.Errorf("want %s, got %s", d, s.Text())
+		}
+	}
 }
 
 func TestScannerStrings(t *testing.T) {

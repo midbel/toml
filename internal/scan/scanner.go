@@ -163,9 +163,6 @@ func (s *Scanner) scanLiteralString(r rune) rune {
 		}
 		s.token.WriteRune(r)
 		if r == quote {
-			if n := s.peek(); !multi && n != '\n' {
-				return Invalid
-			}
 			break
 		}
 	}
