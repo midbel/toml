@@ -123,7 +123,13 @@ func (s *Scanner) Scan() rune {
 		default:
 		}
 	case isString(r):
-		s.Last = s.scanString(r, r)
+		if r == '\'' {
+			s.Last = s.scanLiteralString(r)
+		} else if r == '"' {
+			s.Last = s.scanBasicString(r)
+		} else {
+			s.Last = Invalid
+		}
 	case isDigit(r) || r == minus:
 		s.Last = s.scanDecimal(r)
 	case r == plus:
@@ -137,36 +143,79 @@ func (s *Scanner) Scan() rune {
 	return s.Last
 }
 
+func (s *Scanner) scanLiteralString(r rune) rune {
+	return s.scanString(r, r)
+}
+
+func (s *Scanner) scanBasicString(r rune) rune {
+	s.token.WriteRune(r)
+
+	var multi bool
+	if n := s.peek(); n == '"' {
+		multi = true
+		switch r := s.skipQuotes('"', true); r {
+		case Invalid:
+			return r
+		case EOF:
+			return String
+		}
+	}
+	for {
+		r = s.scanRune()
+		switch r {
+		case EOF:
+			return Invalid
+		case '\\':
+			r = s.scanRune()
+			if r == '\n' {
+				continue
+			}
+		}
+		s.token.WriteRune(r)
+		if r == '"' {
+			break
+		}
+	}
+	if multi {
+		if r := s.skipQuotes('"', false); r == Invalid {
+			return r
+		}
+	}
+	return String
+}
+
+func (s *Scanner) skipQuotes(q rune, trim bool) rune {
+	for i := 0; i < 2; i++ {
+		if r := s.scanRune(); r == '\n' || r == EOF {
+			return EOF
+		} else if r != q {
+			return Invalid
+		}
+	}
+	if !trim {
+		return String
+	}
+	for {
+		r := s.scanRune()
+		if !isWhitespace(r) {
+			s.token.WriteRune(r)
+			break
+		}
+	}
+	return String
+}
+
 func (s *Scanner) scanString(r, q rune) rune {
 	if r != q {
 		return Invalid
 	}
 	basic := r == '"'
-	skipQuote := func(trim bool) rune {
-		for i := 0; i < 2; i++ {
-			if r := s.scanRune(); r == '\n' || r == EOF {
-				return EOF
-			} else if r != q {
-				return Invalid
-			}
-		}
-		if !trim {
-			return String
-		}
-		for {
-			r := s.scanRune()
-			if !isWhitespace(r) {
-				s.token.WriteRune(r)
-				break
-			}
-		}
-		return String
-	}
+
 	s.token.WriteRune(r)
 	var isMulti bool
 	if n := s.peek(); n == '\'' || n == '"' {
 		isMulti = true
-		switch r := skipQuote(true); r {
+		switch r := s.skipQuotes(q, true); r {
 		case Invalid:
 			return r
 		case EOF:
@@ -190,7 +239,7 @@ func (s *Scanner) scanString(r, q rune) rune {
 		}
 	}
 	if isMulti {
-		if r := skipQuote(false); r == Invalid {
+		if r := s.skipQuotes(q, false); r == Invalid {
 			return r
 		}
 	}
