@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -25,6 +26,7 @@ const (
 )
 
 const (
+	tab                = '\t'
 	Dot                = '.'
 	Equal              = '='
 	Comma              = ','
@@ -158,6 +160,9 @@ func (s *Scanner) scanLiteralString(r rune) rune {
 		}
 	}
 	for r = s.scanRune(); ; r = s.scanRune() {
+		if unicode.IsControl(r) && r != tab {
+			return Invalid
+		}
 		if r == EOF {
 			return Invalid
 		}
