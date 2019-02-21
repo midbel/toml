@@ -144,16 +144,47 @@ func (s *Scanner) Scan() rune {
 }
 
 func (s *Scanner) scanLiteralString(r rune) rune {
-	return s.scanString(r, r)
-}
-
-func (s *Scanner) scanBasicString(r rune) rune {
+	quote := r
 	s.token.WriteRune(r)
 
 	var multi bool
-	if n := s.peek(); n == '"' {
+	if n := s.peek(); n == quote {
 		multi = true
-		switch r := s.skipQuotes('"', true); r {
+		switch r := s.skipQuotes(quote, true); r {
+		case Invalid:
+			return r
+		case EOF:
+			return String
+		}
+	}
+	for r = s.scanRune(); ; r = s.scanRune() {
+		if r == EOF {
+			return Invalid
+		}
+		s.token.WriteRune(r)
+		if r == quote {
+			if n := s.peek(); !multi && n != '\n' {
+				return Invalid
+			}
+			break
+		}
+	}
+	if multi {
+		if r := s.skipQuotes(quote, false); r == Invalid {
+			return r
+		}
+	}
+	return String
+}
+
+func (s *Scanner) scanBasicString(r rune) rune {
+	quote := r
+	s.token.WriteRune(r)
+
+	var multi bool
+	if n := s.peek(); n == quote {
+		multi = true
+		switch r := s.skipQuotes(quote, true); r {
 		case Invalid:
 			return r
 		case EOF:
@@ -172,12 +203,12 @@ func (s *Scanner) scanBasicString(r rune) rune {
 			}
 		}
 		s.token.WriteRune(r)
-		if r == '"' {
+		if r == quote {
 			break
 		}
 	}
 	if multi {
-		if r := s.skipQuotes('"', false); r == Invalid {
+		if r := s.skipQuotes(quote, false); r == Invalid {
 			return r
 		}
 	}
@@ -200,47 +231,6 @@ func (s *Scanner) skipQuotes(q rune, trim bool) rune {
 		if !isWhitespace(r) {
 			s.token.WriteRune(r)
 			break
-		}
-	}
-	return String
-}
-
-func (s *Scanner) scanString(r, q rune) rune {
-	if r != q {
-		return Invalid
-	}
-	basic := r == '"'
-
-	s.token.WriteRune(r)
-	var isMulti bool
-	if n := s.peek(); n == '\'' || n == '"' {
-		isMulti = true
-		switch r := s.skipQuotes(q, true); r {
-		case Invalid:
-			return r
-		case EOF:
-			return String
-		}
-	}
-	for {
-		r = s.scanRune()
-		switch r {
-		case EOF:
-			return Invalid
-		case '\\':
-			r = s.scanRune()
-			if r == '\n' && basic {
-				continue
-			}
-		}
-		s.token.WriteRune(r)
-		if r == q {
-			break
-		}
-	}
-	if isMulti {
-		if r := s.skipQuotes(q, false); r == Invalid {
-			return r
 		}
 	}
 	return String
