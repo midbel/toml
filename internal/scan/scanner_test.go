@@ -24,7 +24,7 @@ func TestScannerIdents(t *testing.T) {
 	for i, d := range data {
 		s.Reset(strings.NewReader(d.Value))
 		if k := s.Scan(); k != d.Want {
-			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(k))
+			t.Errorf("%d) parsing %q failed! want %q got %s", i+1, d.Value, TokenString(d.Want), TokenString(k))
 		}
 	}
 }
@@ -60,7 +60,7 @@ trimmed in raw strings.
 		`'\\ServerX\admin$\system32\'`,
 		`'Tom "Dubs" Preston-Werner'`,
 		`'<\i\c*\s*>'`,
-		`''I [dw]on't need \d{2} apples'''`,
+		`'''I [dw]on't need \d{2} apples'''`,
 		multilines,
 	}
 	var s Scanner
@@ -70,8 +70,9 @@ trimmed in raw strings.
 			t.Errorf("%d) parsing %q failed! want string got %q", i+1, d, TokenString(k))
 			continue
 		}
-		if s.Text() != d {
-			t.Errorf("want %s, got %s", d, s.Text())
+		g, w := strings.Trim(s.Text(), "'"), strings.TrimLeft(strings.Trim(d, "'"), "\n")
+		if g != w {
+			t.Errorf("want %s, got %s", w, g)
 		}
 	}
 }

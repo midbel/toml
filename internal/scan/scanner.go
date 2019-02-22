@@ -26,7 +26,6 @@ const (
 )
 
 const (
-	tab                = '\t'
 	Dot                = '.'
 	Equal              = '='
 	Comma              = ','
@@ -37,15 +36,19 @@ const (
 )
 
 const (
-	hash   = '#'
-	minus  = '-'
-	plus   = '+'
-	space  = ' '
-	colon  = ':'
-	scolon = ';'
-	nl     = '\n'
-	squote = '\''
-	dquote = '"'
+	underscore = '_'
+	hash       = '#'
+	minus      = '-'
+	plus       = '+'
+	space      = ' '
+	colon      = ':'
+	scolon     = ';'
+	tab        = '\t'
+	nl         = '\n'
+	squote     = '\''
+	dquote     = '"'
+	bslash     = '\\'
+	carriage   = '\r'
 )
 
 type Scanner struct {
@@ -125,9 +128,9 @@ func (s *Scanner) Scan() rune {
 		default:
 		}
 	case isString(r):
-		if r == '\'' {
+		if r == squote {
 			s.Last = s.scanLiteralString(r)
-		} else if r == '"' {
+		} else if r == dquote {
 			s.Last = s.scanBasicString(r)
 		} else {
 			s.Last = Invalid
@@ -146,13 +149,12 @@ func (s *Scanner) Scan() rune {
 }
 
 func (s *Scanner) scanLiteralString(r rune) rune {
-	quote := r
 	s.token.WriteRune(r)
 
 	var multi bool
-	if n := s.peek(); n == quote {
+	if n := s.peek(); n == squote {
 		multi = true
-		switch r := s.skipQuotes(quote, true); r {
+		switch r := s.skipQuotes(squote, true); r {
 		case Invalid:
 			return r
 		case EOF:
@@ -160,19 +162,24 @@ func (s *Scanner) scanLiteralString(r rune) rune {
 		}
 	}
 	for r = s.scanRune(); ; r = s.scanRune() {
-		if unicode.IsControl(r) && r != tab {
+		if unicode.IsControl(r) && r != tab && r != nl {
 			return Invalid
 		}
 		if r == EOF {
 			return Invalid
 		}
 		s.token.WriteRune(r)
-		if r == quote {
+		if r == squote {
+			if multi {
+				if n := s.peek(); n != squote {
+					continue
+				}
+			}
 			break
 		}
 	}
 	if multi {
-		if r := s.skipQuotes(quote, false); r == Invalid {
+		if r := s.skipQuotes(squote, false); r == Invalid {
 			return r
 		}
 	}
@@ -180,13 +187,12 @@ func (s *Scanner) scanLiteralString(r rune) rune {
 }
 
 func (s *Scanner) scanBasicString(r rune) rune {
-	quote := r
 	s.token.WriteRune(r)
 
 	var multi bool
-	if n := s.peek(); n == quote {
+	if n := s.peek(); n == dquote {
 		multi = true
-		switch r := s.skipQuotes(quote, true); r {
+		switch r := s.skipQuotes(dquote, true); r {
 		case Invalid:
 			return r
 		case EOF:
@@ -198,19 +204,19 @@ func (s *Scanner) scanBasicString(r rune) rune {
 		switch r {
 		case EOF:
 			return Invalid
-		case '\\':
+		case bslash:
 			r = s.scanRune()
-			if r == '\n' {
+			if r == nl {
 				continue
 			}
 		}
 		s.token.WriteRune(r)
-		if r == quote {
+		if r == dquote {
 			break
 		}
 	}
 	if multi {
-		if r := s.skipQuotes(quote, false); r == Invalid {
+		if r := s.skipQuotes(dquote, false); r == Invalid {
 			return r
 		}
 	}
@@ -219,7 +225,7 @@ func (s *Scanner) scanBasicString(r rune) rune {
 
 func (s *Scanner) skipQuotes(q rune, trim bool) rune {
 	for i := 0; i < 2; i++ {
-		if r := s.scanRune(); r == '\n' || r == EOF {
+		if r := s.scanRune(); r == nl || r == EOF {
 			return EOF
 		} else if r != q {
 			return Invalid
@@ -250,10 +256,10 @@ func (s *Scanner) Reset(r io.Reader) (err error) {
 func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 	if accept == nil {
 		accept = func(r rune) bool {
-			return isDigit(r) || r == '_'
+			return isDigit(r) || r == underscore
 		}
 	}
-	if r != '_' {
+	if r != underscore {
 		s.token.WriteRune(r)
 	}
 	for {
@@ -264,7 +270,7 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 			}
 			break
 		}
-		if !(r == plus || r == '_') {
+		if !(r == plus || r == underscore) {
 			s.token.WriteRune(r)
 		}
 	}
@@ -272,7 +278,7 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 }
 
 func (s *Scanner) scanDecimal(r rune) rune {
-	if r != '_' {
+	if r != underscore {
 		s.token.WriteRune(r)
 	}
 	switch n := s.peek(); n {
@@ -289,7 +295,7 @@ func (s *Scanner) scanDecimal(r rune) rune {
 			return s.scanTime(r)
 		case r == minus:
 			return s.scanDate(r)
-		case r == '_':
+		case r == underscore:
 		case isDigit(r):
 			s.token.WriteRune(r)
 		case r == Dot:
@@ -415,6 +421,7 @@ var tokenTypes = map[rune]string{
 	Ident:    "ident",
 	String:   "string",
 	Int:      "int",
+	Uint:     "uint",
 	Float:    "float",
 	Decimal:  "decimal",
 	DateTime: "datetime",
@@ -428,7 +435,7 @@ func TokenString(r rune) string {
 	if ok {
 		return v
 	}
-	return fmt.Sprintf("%q", r)
+	return fmt.Sprintf("%v", r)
 }
 
 type Position struct {
@@ -446,7 +453,7 @@ func isComment(r rune) bool {
 }
 
 func isString(r rune) bool {
-	return r == '\'' || r == '"'
+	return r == squote || r == dquote
 }
 
 func isIdent(r rune) bool {
@@ -458,21 +465,21 @@ func isDigit(r rune) bool {
 }
 
 func isIdentRune(r rune) bool {
-	return isIdent(r) || r == '-' || r == '_' || isDigit(r)
+	return isIdent(r) || r == '-' || r == underscore || isDigit(r)
 }
 
 func isWhitespace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	return r == space || r == tab || r == nl || r == carriage
 }
 
 func isHexRune(r rune) bool {
-	return r == '_' || ('0' <= r && r <= '9') || ('a' <= r && r <= 'f') || ('A' <= r && r <= 'Z')
+	return r == underscore || ('0' <= r && r <= '9') || ('a' <= r && r <= 'f') || ('A' <= r && r <= 'Z')
 }
 
 func isOctalRune(r rune) bool {
-	return r == '_' || ('0' <= r && r <= '7')
+	return r == underscore || ('0' <= r && r <= '7')
 }
 
 func isBinRune(r rune) bool {
-	return r == '_' || r == '0' || r == '1'
+	return r == underscore || r == '0' || r == '1'
 }
