@@ -206,7 +206,7 @@ func (s *Scanner) scanBasicString(r rune) rune {
 			return Invalid
 		case bslash:
 			r = s.scanRune()
-			if r == nl {
+			if r == nl && multi {
 				continue
 			}
 		}

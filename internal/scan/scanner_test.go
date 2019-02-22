@@ -29,33 +29,24 @@ func TestScannerIdents(t *testing.T) {
 	}
 }
 
-func TestBasicStrings(t *testing.T) {
-	str := `
-"""
-The quick brown \
-fox jumps over \
-the lazy dog."""`
-	var s Scanner
-	s.Reset(strings.NewReader(str))
-	if k := s.Scan(); k != String {
-		t.Errorf("fail parsing string. Want string, got %s", TokenString(k))
-		return
-	}
-	w := `"The quick brown fox jumps over the lazy dog."`
-	if g := s.Text(); g != w {
-		t.Errorf("want %s", w)
-		t.Errorf("got  %s", g)
-	}
+func TestScannerStrings(t *testing.T) {
+	t.Run("basics", testScanBasics)
+	t.Run("literals", testScanLiterals)
+	t.Run("invalid", testInvalidStrings)
 }
 
-func TestLiteralStrings(t *testing.T) {
+func testScanLiterals(t *testing.T) {
 	multilines := `'''
 The first newline is
 trimmed in raw strings.
    All other whitespace
-   is preserved.
-'''`
+   is preserved.'''`
+
 	data := []string{
+		`''`,
+		`'hello world'`,
+		`'''the quick brown fox jumps over the lazy dog'''`,
+		`'''the quick brown fox\njumps over\nthe lazy dog'''`,
 		`'C:\Users\nodejs\templates'`,
 		`'\\ServerX\admin$\system32\'`,
 		`'Tom "Dubs" Preston-Werner'`,
@@ -77,31 +68,52 @@ trimmed in raw strings.
 	}
 }
 
-func TestScannerStrings(t *testing.T) {
-	data := []struct {
-		Value string
-		Want  rune
-	}{
-		{Value: `""`, Want: String},
-		{Value: `''`, Want: String},
-		{Value: `"hello world"`, Want: String},
-		{Value: `'hello world'`, Want: String},
-		{Value: `"hello world`, Want: Invalid},
-		{Value: `'hello world`, Want: Invalid},
-		{Value: `"""the quick brown fox jumps over the lazy dog"""`, Want: String},
-		{Value: `'''the quick brown fox jumps over the lazy dog'''`, Want: String},
-		{Value: `"""the quick brown fox jumps over the lazy dog`, Want: Invalid},
-		{Value: `'''the quick brown fox jumps over the lazy dog`, Want: Invalid},
-		{Value: `"""the quick brown fox jumps over the lazy dog'''`, Want: Invalid},
-		{Value: `'''the quick brown fox jumps over the lazy dog"""`, Want: Invalid},
-		{Value: `"""the quick brown fox\njumps over\nthe lazy dog"""`, Want: String},
-		{Value: `'''the quick brown fox\njumps over\nthe lazy dog'''`, Want: String},
+func testScanBasics(t *testing.T) {
+	multilines := `
+"""
+The quick brown \
+fox jumps over \
+the lazy dog."""`
+
+	data := []string{
+		`""`,
+		`"hello world"`,
+		`"""the quick brown fox jumps over the lazy dog"""`,
+		`"""the quick brown fox\njumps over\nthe lazy dog"""`,
+		multilines,
 	}
 	var s Scanner
 	for i, d := range data {
-		s.Reset(strings.NewReader(d.Value))
-		if k := s.Scan(); k != d.Want {
-			t.Errorf("%d) parsing %q failed! want %q got %q", i+1, d.Value, TokenString(d.Want), TokenString(k))
+		s.Reset(strings.NewReader(d))
+		if k := s.Scan(); k != String {
+			t.Errorf("%d) parsing %q failed! want string got %q", i+1, d, TokenString(k))
+			continue
+		}
+		g, w := strings.Trim(s.Text(), "\""), strings.TrimLeft(strings.Trim(d, "\""), "\n")
+		if g != w {
+			t.Errorf("want %s, got %s", w, g)
+		}
+	}
+}
+
+func testInvalidStrings(t *testing.T) {
+	data := []string{
+		`"`,
+		`'`,
+		`"'`,
+		`'"`,
+		`"hello world`,
+		`'hello world`,
+		`"""the quick brown fox jumps over the lazy dog`,
+		`'''the quick brown fox jumps over the lazy dog`,
+		`"""the quick brown fox jumps over the lazy dog'''`,
+		`'''the quick brown fox jumps over the lazy dog"""`,
+	}
+	var s Scanner
+	for i, d := range data {
+		s.Reset(strings.NewReader(d))
+		if k := s.Scan(); k != Invalid {
+			t.Errorf("%d) parsing %q failed! want string, got %q", i+1, d, TokenString(k))
 		}
 	}
 }
@@ -231,7 +243,19 @@ func TestScannerNumbers(t *testing.T) {
 		case Float:
 			_, err = strconv.ParseFloat(s.Text(), 64)
 		case Int:
-			_, err = strconv.ParseInt(s.Text(), 0, 64)
+			var base int
+			v := s.Text()
+			if strings.HasPrefix(v, "0o") {
+				base = 8
+				v = strings.TrimPrefix(v, "0o")
+			} else if strings.HasPrefix(v, "0b") {
+				base = 2
+				v = strings.TrimPrefix(v, "0b")
+			} else if strings.HasPrefix(v, "0x") {
+				base = 16
+				v = strings.TrimPrefix(v, "0x")
+			}
+			_, err = strconv.ParseInt(v, base, 64)
 		case Uint:
 			_, err = strconv.ParseUint(s.Text(), 0, 64)
 		}
