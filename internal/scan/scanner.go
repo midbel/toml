@@ -43,12 +43,14 @@ const (
 	space      = ' '
 	colon      = ':'
 	scolon     = ';'
+	backspace  = '\b'
 	tab        = '\t'
 	nl         = '\n'
 	squote     = '\''
 	dquote     = '"'
 	bslash     = '\\'
 	carriage   = '\r'
+	formfeed   = '\f'
 )
 
 type Scanner struct {
@@ -209,6 +211,7 @@ func (s *Scanner) scanBasicString(r rune) rune {
 			if r == nl && multi {
 				continue
 			}
+			r = escapeRune(r)
 		}
 		s.token.WriteRune(r)
 		if r == dquote {
@@ -223,9 +226,31 @@ func (s *Scanner) scanBasicString(r rune) rune {
 	return String
 }
 
+func escapeRune(r rune) rune {
+	switch r {
+	default:
+		return r
+	case 'n':
+		return nl
+	case 'f':
+		return formfeed
+	case 'b':
+		return backspace
+	case 't':
+		return tab
+	case 'r':
+		return carriage
+	case '\\':
+		return bslash
+	case dquote:
+		return dquote
+	}
+}
+
 func (s *Scanner) skipQuotes(q rune, trim bool) rune {
 	for i := 0; i < 2; i++ {
 		if r := s.scanRune(); r == nl || r == EOF {
+			s.token.WriteRune(q)
 			return EOF
 		} else if r != q {
 			return Invalid

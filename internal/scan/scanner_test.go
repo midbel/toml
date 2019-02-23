@@ -69,8 +69,7 @@ trimmed in raw strings.
 }
 
 func testScanBasics(t *testing.T) {
-	multilines := `
-"""
+	multilines := `"""
 The quick brown \
 fox jumps over \
 the lazy dog."""`
@@ -90,6 +89,8 @@ the lazy dog."""`
 			continue
 		}
 		g, w := strings.Trim(s.Text(), "\""), strings.TrimLeft(strings.Trim(d, "\""), "\n")
+		g = strings.Replace(g, "\n", "\\n", -1)
+		w = strings.Replace(w, "\\\n", "", -1)
 		if g != w {
 			t.Errorf("want %s, got %s", w, g)
 		}
