@@ -371,3 +371,22 @@ passwd = "gorules"
 		t.Fatal(err)
 	}
 }
+
+func TestDecodeEmptyString(t *testing.T) {
+	s := `
+title = "toml test"
+host  = ""
+users = [
+	{name = "roger", passwd = ""},
+	{name = "pierre", passwd = ""},
+]
+	`
+	c := struct {
+		T  string `toml:"title"`
+		H  string `toml:"host"`
+		Us []user `toml:"users"`
+	}{}
+	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+}
