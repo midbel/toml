@@ -88,11 +88,12 @@ the lazy dog."""`
 			t.Errorf("%d) parsing %q failed! want string got %q", i+1, d, TokenString(k))
 			continue
 		}
-		g, w := strings.Trim(s.Text(), "\""), strings.TrimLeft(strings.Trim(d, "\""), "\n")
-		g = strings.Replace(g, "\n", "\\n", -1)
-		w = strings.Replace(w, "\\\n", "", -1)
-		if g != w {
-			t.Errorf("want %s, got %s", w, g)
+		w := strings.TrimLeft(strings.Trim(d, "\""), "\n")
+		w = strings.ReplaceAll(w, "\\n", "\n")
+		w = strings.ReplaceAll(w, "\\\n", "")
+
+		if g := s.Text(); g != w {
+			t.Errorf("%d: want %s, got %s", i+1, w, g)
 		}
 	}
 }

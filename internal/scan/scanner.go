@@ -130,12 +130,31 @@ func (s *Scanner) Scan() rune {
 		default:
 		}
 	case isString(r):
-		if r == squote {
-			s.Last = s.scanLiteralString(r)
-		} else if r == dquote {
-			s.Last = s.scanBasicString(r)
+		var (
+			multi, empty bool
+			k rune
+		)
+		// check if empty string or multiline
+		if n := s.peek(); n == r {
+			s.scanRune()
+			if n := s.peek(); n == r {
+				s.scanRune()
+				k = s.skipWhitespace()
+				multi = true
+			} else {
+				empty, s.Last = true, String
+			}
 		} else {
-			s.Last = Invalid
+			k = s.scanRune()
+		}
+		if !empty {
+			if r == squote {
+				s.Last = s.scanLiteralString(k, multi)
+			} else if r == dquote {
+				s.Last = s.scanBasicString(k, multi)
+			} else {
+				s.Last = Invalid
+			}
 		}
 	case isDigit(r) || r == minus:
 		s.Last = s.scanDecimal(r)
@@ -150,19 +169,37 @@ func (s *Scanner) Scan() rune {
 	return s.Last
 }
 
-func (s *Scanner) scanLiteralString(r rune) rune {
+func (s *Scanner) scanBasicString(r rune, multi bool) rune {
 	s.token.WriteRune(r)
 
-	var multi bool
-	if n := s.peek(); n == squote {
-		multi = true
-		switch r := s.skipQuotes(squote, true); r {
-		case Invalid:
-			return r
+	for {
+		r = s.scanRune()
+		switch r {
 		case EOF:
-			return String
+			return Invalid
+		case bslash:
+			r = s.scanRune()
+			if r == nl && multi {
+				continue
+			}
+			r = escapeRune(r)
+		}
+		if r == dquote {
+			break
+		}
+		s.token.WriteRune(r)
+	}
+	if multi {
+		if r := s.skipQuotes(dquote, false); r == Invalid {
+			return r
 		}
 	}
+	return String
+}
+
+func (s *Scanner) scanLiteralString(r rune, multi bool) rune {
+	s.token.WriteRune(r)
+
 	for r = s.scanRune(); ; r = s.scanRune() {
 		if unicode.IsControl(r) && r != tab && r != nl {
 			return Invalid
@@ -182,44 +219,6 @@ func (s *Scanner) scanLiteralString(r rune) rune {
 	}
 	if multi {
 		if r := s.skipQuotes(squote, false); r == Invalid {
-			return r
-		}
-	}
-	return String
-}
-
-func (s *Scanner) scanBasicString(r rune) rune {
-	s.token.WriteRune(r)
-
-	var multi bool
-	if n := s.peek(); n == dquote {
-		multi = true
-		switch r := s.skipQuotes(dquote, true); r {
-		case Invalid:
-			return r
-		case EOF:
-			return String
-		}
-	}
-	for {
-		r = s.scanRune()
-		switch r {
-		case EOF:
-			return Invalid
-		case bslash:
-			r = s.scanRune()
-			if r == nl && multi {
-				continue
-			}
-			r = escapeRune(r)
-		}
-		s.token.WriteRune(r)
-		if r == dquote {
-			break
-		}
-	}
-	if multi {
-		if r := s.skipQuotes(dquote, false); r == Invalid {
 			return r
 		}
 	}
