@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	// "strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -70,6 +71,7 @@ func NewScanner(r io.Reader) *Scanner {
 }
 
 func (s *Scanner) Text() string {
+	// return strings.TrimSpace(s.token.String())
 	return s.token.String()
 }
 
@@ -95,6 +97,11 @@ func (s *Scanner) peek() rune {
 			return r
 		}
 	}
+}
+
+func (s *Scanner) peekNext() rune {
+	r, _ := utf8.DecodeRune(s.buffer[s.offset:])
+	return r
 }
 
 func (s *Scanner) Peek() rune {
@@ -132,7 +139,7 @@ func (s *Scanner) Scan() rune {
 	case isString(r):
 		var (
 			multi, empty bool
-			k rune
+			k            rune
 		)
 		// check if empty string or multiline
 		if n := s.peek(); n == r {
@@ -294,6 +301,7 @@ func (s *Scanner) scanNumber(r rune, accept func(rune) bool) rune {
 			}
 			break
 		}
+
 		if !(r == plus || r == underscore) {
 			s.token.WriteRune(r)
 		}
@@ -305,13 +313,15 @@ func (s *Scanner) scanDecimal(r rune) rune {
 	if r != underscore {
 		s.token.WriteRune(r)
 	}
-	switch n := s.peek(); n {
-	case 'x':
-		return s.scanNumber(s.scanRune(), isHexRune)
-	case 'o':
-		return s.scanNumber(s.scanRune(), isOctalRune)
-	case 'b':
-		return s.scanNumber(s.scanRune(), isBinRune)
+	if r == '0' {
+		switch n := s.peekNext(); n {
+		case 'x':
+			return s.scanNumber(s.scanRune(), isHexRune)
+		case 'o':
+			return s.scanNumber(s.scanRune(), isOctalRune)
+		case 'b':
+			return s.scanNumber(s.scanRune(), isBinRune)
+		}
 	}
 	for {
 		switch r = s.scanRune(); {
