@@ -9,6 +9,26 @@ import (
 	"unicode/utf8"
 )
 
+const (
+	carriage   = '\r'
+	newline    = '\n'
+	pound      = '#'
+	space      = ' '
+	tab        = '\t'
+	equal      = '='
+	dot        = '.'
+	comma      = ','
+	lsquare    = '['
+	rsquare    = ']'
+	lcurly     = '{'
+	rcurly     = '}'
+	plus       = '+'
+	minus      = '-'
+	underscore = '_'
+	colon      = ':'
+	backslash  = '\\'
+)
+
 var escapes = map[rune]rune{
 	'b':  '\b',
 	't':  tab,
@@ -456,10 +476,6 @@ func (s *Scanner) scanString(t *Token) {
 	s.readRune()
 	if s.char == quote {
 		s.readRune()
-		// if s.isNewline() || s.char == EOF {
-		// 	s.unreadRune()
-		// 	return
-		// }
 		if !isQuote(s.char) {
 			s.unreadRune()
 			return

@@ -5,26 +5,6 @@ import (
 )
 
 const (
-	carriage   = '\r'
-	newline    = '\n'
-	pound      = '#'
-	space      = ' '
-	tab        = '\t'
-	equal      = '='
-	dot        = '.'
-	comma      = ','
-	lsquare    = '['
-	rsquare    = ']'
-	lcurly     = '{'
-	rcurly     = '}'
-	plus       = '+'
-	minus      = '-'
-	underscore = '_'
-	colon      = ':'
-	backslash  = '\\'
-)
-
-const (
 	EOF rune = -(iota + 1)
 	Ident
 	String
@@ -39,39 +19,6 @@ const (
 	Comment
 	Punct
 )
-
-func tokenString(r rune) string {
-	switch r {
-	default:
-		return "other"
-	case lcurly:
-		return "table"
-	case lsquare:
-		return "array"
-	case EOF:
-		return "eof"
-	case Ident:
-		return "ident"
-	case String:
-		return "string"
-	case Integer:
-		return "integer"
-	case Float:
-		return "float"
-	case Bool:
-		return "boolean"
-	case Date:
-		return "date"
-	case Time:
-		return "time"
-	case DateTime:
-		return "datetime"
-	case Illegal:
-		return "illegal"
-	case Comment:
-		return "comment"
-	}
-}
 
 type Position struct {
 	Line   int
@@ -139,4 +86,37 @@ func (t Token) String() string {
 		return fmt.Sprintf("<punct(%c)>", t.Type)
 	}
 	return fmt.Sprintf("<%s(%s)>", str, t.Literal)
+}
+
+func tokenString(r rune) string {
+	switch r {
+	default:
+		return "other"
+	case lcurly:
+		return "table"
+	case lsquare:
+		return "array"
+	case EOF:
+		return "eof"
+	case Ident:
+		return "ident"
+	case String:
+		return "string"
+	case Integer:
+		return "integer"
+	case Float:
+		return "float"
+	case Bool:
+		return "boolean"
+	case Date:
+		return "date"
+	case Time:
+		return "time"
+	case DateTime:
+		return "datetime"
+	case Illegal:
+		return "illegal"
+	case Comment:
+		return "comment"
+	}
 }
