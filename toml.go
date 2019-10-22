@@ -1,414 +1,337 @@
 package toml
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/midbel/toml/internal/scan"
 )
 
-const (
-	eof     = scan.EOF
-	dot     = scan.Dot
-	lsquare = scan.LeftSquareBracket
-	rsquare = scan.RightSquareBracket
-	lcurly  = scan.LeftCurlyBracket
-	rcurly  = scan.RightCurlyBracket
-	equal   = scan.Equal
-	comma   = scan.Comma
+const tomlTag = "toml"
+
+var (
+	ErrSyntax    = errors.New("invalid syntax")
+	ErrDuplicate = errors.New("duplicate option")
 )
 
-type UnknownError struct {
-	elem, name string
+func unexpectedToken(curr Token) error {
+	return fmt.Errorf("%s %w: unexpected token %s", curr.Pos, ErrSyntax, curr)
 }
 
-func (u UnknownError) Error() string {
-	return fmt.Sprintf("toml: %s not recognized: %q!", u.elem, strings.Trim(u.name, "\""))
+func duplicateOption(opt option) error {
+	return fmt.Errorf("%s %w: %s (%s)", opt.key.Pos, ErrDuplicate, opt.key.Literal, opt.value)
 }
 
-type SyntaxError struct {
-	want, got rune
-}
-
-func (s SyntaxError) Error() string {
-	if s.want <= 0 && s.got <= 0 {
-		return fmt.Sprintf("toml: invalid syntax")
-	}
-	w, g := scan.TokenString(s.want), scan.TokenString(s.got)
-	return fmt.Sprintf("toml: invalid syntax! want %s but got %s", w, g)
-}
-
-type Decoder struct {
-	scanner *scan.Scanner
-}
-
-func Unmarshal(bs []byte, v interface{}) error {
-	return NewDecoder(bytes.NewReader(bs)).Decode(v)
-}
-
-func NewDecoder(r io.Reader) *Decoder {
-	s := scan.NewScanner(r)
-	return &Decoder{s}
-}
-
-func (d *Decoder) Decode(v interface{}) error {
-	e := reflect.ValueOf(v)
-	if k := e.Kind(); k != reflect.Ptr {
-		return fmt.Errorf("expected pointer! got %s", k)
-	}
-	return d.decode(e.Elem())
-}
-
-func (d *Decoder) DecodeElement(v interface{}) error {
-	e := reflect.ValueOf(v)
-	if k := e.Kind(); k != reflect.Ptr {
-		return fmt.Errorf("expected pointer! got %s", k)
-	}
-	switch e := e.Elem(); d.scanner.Last {
-	case scan.Ident:
-		return d.decodeBody(e)
-	case equal:
-		return d.decodeOption(e)
-	default:
-		return fmt.Errorf("can only be called to decode table or option")
-	}
-}
-
-func (d *Decoder) decode(v reflect.Value) error {
-	d.scanner.Scan()
-	if err := d.decodeBody(v); err != nil {
+func DecodeFile(file string, v interface{}) error {
+	r, err := os.Open(file)
+	if err != nil {
 		return err
 	}
-	vs := options(v)
-	for t := d.scanner.Scan(); t != scan.EOF; t = d.scanner.Scan() {
-		if err := d.decodeElement(vs); err != nil {
-			return err
-		}
-	}
-	return nil
+	defer r.Close()
+	return Decode(r, v)
 }
 
-func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
-	var (
-		v  reflect.Value
-		ok bool
-	)
-	for t := d.scanner.Last; t != rsquare && t != scan.EOF; t = d.scanner.Scan() {
-		switch t {
-		case scan.Ident:
-			v, ok = vs[d.scanner.Text()]
-			if !ok {
-				return tableNotFound(d.scanner.Text())
-			}
-		case lsquare:
-			continue
-		case scan.Dot:
-			if k := v.Kind(); k == reflect.Slice {
-				if v.Len() == 0 {
-					x := reflect.New(v.Type().Elem()).Elem()
-					v.Set(reflect.Append(v, x))
-				}
-				v = v.Index(v.Len() - 1)
-			}
-			d.scanner.Scan()
-			return d.decodeElement(options(v))
-		default:
-			return unexpectedToken(t)
-		}
+func Decode(r io.Reader, v interface{}) error {
+	n, err := Parse(r)
+	if err != nil {
+		return err
 	}
-	for t := d.scanner.Last; t == rsquare; t = d.scanner.Scan() {
+	root, ok := n.(*table)
+	if !ok {
+		return fmt.Errorf("root node is not a table!") // should never happen
 	}
-	if k := v.Kind(); k == reflect.Slice {
-		x := reflect.New(v.Type().Elem()).Elem()
-		defer appendValue(v, x)
-		v = x
-	}
-	return d.decodeBody(v)
+	return decodeTable(root, reflect.ValueOf(v).Elem())
 }
 
-func trimQuotes(s string) string {
-	return strings.TrimFunc(s, func(r rune) bool {
-		return r == '\'' || r == '"'
-	})
-}
-
-func (d *Decoder) decodeBody(v reflect.Value) error {
-	if v.Kind() == reflect.Map {
-		return d.decodeBodyMap(v)
+func decodeTableArray(t *table, v reflect.Value) error {
+	if k := v.Kind(); k != reflect.Slice {
+		return fmt.Errorf("expected slice, got %s", k)
 	}
-	vs := options(v)
-	seen := make(map[string]struct{})
-	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
-		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return malformed("invalid key")
-		}
-		k := trimQuotes(d.scanner.Text())
-		if _, ok := seen[k]; ok {
-			return fmt.Errorf("duplicate option %s", k)
-		}
-		seen[k] = struct{}{}
-
-		f, ok := vs[k]
-		if !ok {
-			return optionNotFound(d.scanner.Text())
-		}
-		if t := d.scanner.Scan(); t != equal {
-			return invalidSyntax(t, equal)
-		}
-		if err := d.decodeOption(f); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *Decoder) decodeBodyMap(v reflect.Value) error {
-	v.Set(reflect.MakeMap(v.Type()))
-
-	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
-		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return malformed("invalid key")
-		}
-		k := trimQuotes(d.scanner.Text())
-		f := reflect.New(v.Type().Elem()).Elem()
-		if t := d.scanner.Scan(); t != equal {
-			return invalidSyntax(t, equal)
-		}
-		if err := d.decodeOption(f); err != nil {
-			return err
-		}
-		v.SetMapIndex(reflect.ValueOf(k), f)
-	}
-	return nil
-}
-
-func (d *Decoder) decodeOption(v reflect.Value) error {
 	var err error
-	switch t := d.scanner.Scan(); t {
-	case lsquare:
-		err = parseInlineArray(d.scanner, v)
-	case lcurly:
-		err = parseInlineTable(d.scanner, v)
-	default:
-		err = parseSimple(d.scanner, v)
+	for i := range t.nodes {
+		n, ok := t.nodes[i].(*table)
+		if !ok {
+			err = fmt.Errorf("unexpected table type: %T", t.nodes[i])
+			break
+		}
+		f := reflect.New(v.Type().Elem()).Elem()
+		if err = decodeTable(n, f); err != nil {
+			break
+		}
+		v.Set(reflect.Append(v, f))
 	}
 	return err
 }
 
-func malformed(m string) error {
-	return fmt.Errorf("toml: invalid syntax: %s", m)
-}
-
-func invalidSyntax(w, g rune) error {
-	return SyntaxError{w, g}
-}
-
-func unexpectedToken(g rune) error {
-	return fmt.Errorf("toml: invalid syntax! unexpected token %s", scan.TokenString(g))
-}
-
-func tableNotFound(n string) error {
-	return UnknownError{"table", n}
-}
-
-func optionNotFound(n string) error {
-	return UnknownError{"option", n}
-}
-
-type settableValue struct {
-	Value reflect.Value
-	Set   bool
-
-	Table  string
-	Option string
-}
-
-func options(v reflect.Value) map[string]reflect.Value {
-	if k := v.Kind(); k == reflect.Ptr {
+func decodeTable(t *table, v reflect.Value) error {
+	var err error
+	switch k := v.Kind(); k {
+	case reflect.Ptr:
 		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
+			f := reflect.New(v.Type().Elem())
+			if err = decodeTable(t, reflect.Indirect(f)); err == nil {
+				v.Set(f)
+			}
+		} else {
+			err = decodeTable(t, v.Elem())
 		}
-		v = v.Elem()
+	case reflect.Struct:
+		err = decodeStruct(t, v)
+	case reflect.Map:
+		err = decodeMap(t, v)
+	default:
+		err = fmt.Errorf("can not decode table into %s", k)
 	}
-	if k := v.Kind(); k != reflect.Struct {
-		return nil
-	}
-	fs := make(map[string]reflect.Value)
-	for i, t := 0, v.Type(); i < v.NumField(); i++ {
-		f := v.Field(i)
-		if !f.CanSet() {
-			continue
-		}
-		j := t.Field(i)
-		switch n := j.Tag.Get("toml"); {
-		case n == "-":
-			continue
-		case n == "":
-			fs[strings.ToLower(j.Name)] = f
-		default:
-			fs[n] = f
-		}
-	}
-	return fs
+	return err
 }
 
-func appendValue(a, v reflect.Value) {
-	a.Set(reflect.Append(a, v))
+func decodeMap(t *table, v reflect.Value) error {
+	// k := v.Type().Key()
+	// if k := k.Kind(); k != reflect.String {
+	// 	return fmt.Errorf("can not decode into given map")
+	// }
+	// for i := range t.nodes {
+	// 	switch n := t.nodes[i].(type) {
+	// 	case *table:
+	// 	case option:
+	// 	}
+	// }
+	return nil
 }
 
-type Setter interface {
-	Set(string) error
-}
+func decodeStruct(t *table, v reflect.Value) error {
+	sort.Slice(t.nodes, func(i, j int) bool {
+		pi, pj := t.nodes[i].Pos(), t.nodes[j].Pos()
+		return pi.Line <= pj.Line
+	})
 
-var setterType = reflect.TypeOf((*Setter)(nil)).Elem()
-
-func asSetter(f reflect.Value, v string) (bool, error) {
-	if f.CanAddr() {
-		return asSetter(f.Addr(), v)
-	}
-	if f.CanInterface() && f.Type().Implements(setterType) {
-		s := f.Interface().(Setter)
-		return true, s.Set(v)
-	}
-	return false, nil
-}
-
-func parseSimple(s *scan.Scanner, f reflect.Value) error {
-	var v string
-	if s.Last != scan.String {
-		v = strings.Trim(s.Text(), "\"")
-	} else {
-		v = trimQuotes(s.Text())
-	}
-
-	if ok, err := asSetter(f, v); ok {
+	obj, err := newObject(v)
+	if err != nil {
 		return err
 	}
-	switch t, k := s.Last, f.Kind(); {
-	case t == scan.Ident && k == reflect.Bool:
-		n, _ := strconv.ParseBool(v)
-		f.SetBool(n)
-	case t == scan.String && k == reflect.String:
-		f.SetString(v)
-	case t == scan.Int && isInt(k):
-		n, _ := strconv.ParseInt(v, 0, 64)
-		f.SetInt(n)
-	case (t == scan.Int || t == scan.Uint) && isUint(k):
-		n, _ := strconv.ParseUint(v, 0, 64)
-		f.SetUint(n)
-	case (t == scan.Float || t == scan.Int || t == scan.Uint) && isFloat(k):
-		n, _ := strconv.ParseFloat(v, 64)
-		f.SetFloat(n)
-	case (t == scan.Date || t == scan.DateTime) && isTime(f):
-		var set bool
-		for _, df := range dateFormats {
-			t, err := time.Parse(df, v)
-			if err == nil {
-				f.Set(reflect.ValueOf(t))
-				set = true
+	for i := range t.nodes {
+		switch n := t.nodes[i].(type) {
+		case option:
+			v, err = obj.Get(n.key.Literal)
+			if err != nil {
 				break
 			}
+			err = decodeOption(n, v)
+		case *table:
+			v, err = obj.Get(n.key.Literal)
+			if err != nil {
+				break
+			}
+			if n.kind == arrayTable {
+				err = decodeTableArray(n, v)
+			} else {
+				err = decodeTable(n, v)
+			}
+		default:
+			err = fmt.Errorf("unexpected node type %T", n)
 		}
-		if !set {
-			return fmt.Errorf("no date format match %s", v)
+		if err != nil {
+			break
 		}
+	}
+	return err
+}
+
+func decodeArrayOption(a *array, v reflect.Value) error {
+	if k := v.Kind(); k != reflect.Slice {
+		return fmt.Errorf("expected slice, got %s", k)
+	}
+	var err error
+	for i := range a.nodes {
+		f := reflect.New(v.Type().Elem()).Elem()
+		switch x := a.nodes[i].(type) {
+		case literal:
+			err = decodeLiteral(x, f)
+		case *array:
+			err = decodeArrayOption(x, f)
+		case *table:
+			err = decodeTable(x, f)
+		default:
+			err = fmt.Errorf("unexpected type %T", a.nodes[i])
+		}
+		if err != nil {
+			break
+		}
+		v.Set(reflect.Append(v, f))
+	}
+	return err
+}
+
+func decodeOption(o option, v reflect.Value) error {
+	var err error
+	switch x := o.value.(type) {
+	case literal:
+		err = decodeLiteral(x, v)
+	case *array:
+		err = decodeArrayOption(x, v)
+	case *table:
+		err = decodeTable(x, v)
 	default:
-		return fmt.Errorf("toml: unsupported type: %s (%s)", scan.TokenString(s.Last), k)
+		err = fmt.Errorf("unexpected option type %T", x)
 	}
-	return nil
+	return err
 }
 
-var dateFormats = []string{
-	time.RFC3339,
-	"2006-01-02 15:04:05.000Z",
-	"2006-01-02 15:04:05Z",
-	"2006-01-02T15:04:05",
-	"2006-01-02T15:04:05.000",
-	"2006-01-02 15:04:05.000",
-	"2006-01-02 15:04:05",
-	"2006-01-02",
-}
-
-func parseInlineArray(s *scan.Scanner, f reflect.Value) error {
-	for t := s.Scan(); t != rsquare && t != eof; t = s.Scan() {
-		if t == comma {
-			continue
-		}
-		var err error
-		x := reflect.New(f.Type().Elem()).Elem()
-		switch t {
-		case lcurly:
-			err = parseInlineTable(s, x)
-		case lsquare:
-			err = parseInlineArray(s, x)
-		default:
-			err = parseSimple(s, x)
-		}
-		f.Set(reflect.Append(f, x))
+func decodeLiteral(lit literal, v reflect.Value) error {
+	switch typ, kind := lit.token.Type, v.Kind(); {
+	case typ == String && kind == reflect.String:
+		v.SetString(lit.token.Literal)
+	case typ == Integer && isInt(kind):
+		x, err := strconv.ParseInt(lit.token.Literal, 0, 64)
 		if err != nil {
 			return err
 		}
-		if r := s.Peek(); r != rsquare && r != comma {
-			// return invalidSyntax(r)
-			return fmt.Errorf("array: invalid syntax! got %c want %c or %c", r, rsquare, comma)
-		}
-	}
-	return nil
-}
-
-func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
-	vs := options(f)
-	for t := s.Scan(); t != rcurly && t != eof; t = s.Scan() {
-		if t == comma {
-			continue
-		}
-		var err error
-
-		x, ok := vs[s.Text()]
-		if !ok {
-			return fmt.Errorf("unknown option %q", s.Text())
-		}
-		if t := s.Scan(); t != equal {
-			// return invalidSyntax(equal, t)
-			return fmt.Errorf("table: invalid syntax! got %c want %c", t, equal)
-		}
-		switch t := s.Scan(); t {
-		case lcurly:
-			err = parseInlineTable(s, x)
-		case lsquare:
-			err = parseInlineArray(s, x)
-		default:
-			err = parseSimple(s, x)
-		}
+		v.SetInt(x)
+	case typ == Integer && isUint(kind):
+		x, err := strconv.ParseUint(lit.token.Literal, 0, 64)
 		if err != nil {
 			return err
 		}
-		if r := s.Peek(); r != rcurly && r != comma {
-			// return invalidSyntax(r)
-			return fmt.Errorf("table: invalid syntax! got %c want %c or %c", r, rcurly, comma)
+		v.SetUint(x)
+	case typ == Float && isFloat(kind):
+		x, err := strconv.ParseFloat(lit.token.Literal, 64)
+		if err != nil {
+			return err
 		}
+		v.SetFloat(x)
+	case typ == Bool && kind == reflect.Bool:
+		x, err := strconv.ParseBool(lit.token.Literal)
+		if err != nil {
+			return err
+		}
+		v.SetBool(x)
+	case typ == DateTime && isTime(v):
+		pattern := makeTimePatterns([]string{dtFormat1, dtFormat2}, true)
+		t, err := parseTime(lit.token.Literal, pattern)
+		if err != nil {
+			return err
+		}
+		v.Set(reflect.ValueOf(t))
+	case typ == Date && isTime(v):
+		t, err := parseTime(lit.token.Literal, []string{dateFormat})
+		if err != nil {
+			return err
+		}
+		v.Set(reflect.ValueOf(t))
+	case typ == Time && isTime(v):
+		pattern := makeTimePatterns([]string{timeFormat}, true)
+		t, err := parseTime(lit.token.Literal, pattern)
+		if err != nil {
+			return err
+		}
+		v.Set(reflect.ValueOf(t))
+	default:
+		return fmt.Errorf("can not decode %s in %s (%s)", lit.token, kind, tokenString(typ))
 	}
 	return nil
 }
 
-func isInt(k reflect.Kind) bool {
-	return k == reflect.Int || k == reflect.Int8 || k == reflect.Int16 || k == reflect.Int32 || k == reflect.Int64
+var (
+	tzFormat   = "Z07:00"
+	dateFormat = "2006-01-02"
+	timeFormat = "15:04:05"
+	dtFormat1  = dateFormat + "T" + timeFormat
+	dtFormat2  = dateFormat + " " + timeFormat
+	millisPrec = ".000"
+	microsPrec = ".000000"
+)
+
+func makeTimePatterns(pattern []string, zone bool) []string {
+	ps := make([]string, 0, len(pattern)*4)
+	millis := []string{millisPrec, microsPrec}
+	for _, p := range pattern {
+		ps = append(ps, p)
+		for _, m := range millis {
+			ps = append(ps, p+m)
+			if zone {
+				ps = append(ps, p+m+tzFormat)
+			}
+		}
+	}
+	return ps
 }
 
-func isUint(k reflect.Kind) bool {
-	return k == reflect.Uint || k == reflect.Uint8 || k == reflect.Uint16 || k == reflect.Uint32 || k == reflect.Uint64
+func parseTime(str string, pattern []string) (time.Time, error) {
+	for _, pat := range pattern {
+		t, err := time.Parse(pat, str)
+		if err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("%s: no format match given datetime", str)
+}
+
+func isTime(v reflect.Value) bool {
+	var z time.Time
+	return v.Type().AssignableTo(reflect.TypeOf(z))
 }
 
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
 }
 
-func isTime(v reflect.Value) bool {
-	var z time.Time
-	return v.Type().AssignableTo(reflect.TypeOf(z))
+func isInt(k reflect.Kind) bool {
+	return k == reflect.Int64 || k == reflect.Int32 || k == reflect.Int16 || k == reflect.Int8 || k == reflect.Int
+}
+
+func isUint(k reflect.Kind) bool {
+	return k == reflect.Uint64 || k == reflect.Uint32 || k == reflect.Uint16 || k == reflect.Uint8 || k == reflect.Uint
+}
+
+type object struct {
+	typ    reflect.Type
+	fields []reflect.Value
+	index  map[string]int
+}
+
+func newObject(v reflect.Value) (*object, error) {
+	if k := v.Kind(); k != reflect.Struct {
+		return nil, fmt.Errorf("newObject: expected struct, got %s", k)
+	}
+	obj := object{
+		typ:    v.Type(),
+		fields: make([]reflect.Value, 0, v.NumField()),
+		index:  make(map[string]int),
+	}
+	typ := v.Type()
+	for i, j := 0, 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+		f := typ.Field(i)
+
+		switch tag := f.Tag.Get(tomlTag); tag {
+		case "":
+		case "-":
+			continue
+		default:
+			obj.index[strings.ToLower(tag)] = j
+		}
+		obj.index[strings.ToLower(f.Name)] = j
+		obj.fields = append(obj.fields, field)
+
+		j++
+	}
+	return &obj, nil
+}
+
+func (o object) Get(str string) (v reflect.Value, err error) {
+	i, ok := o.index[str]
+	if ok {
+		v = o.fields[i]
+	} else {
+		err = fmt.Errorf("%s: option not found for %s", str, o.typ)
+	}
+	return
 }
