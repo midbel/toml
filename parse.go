@@ -2,7 +2,7 @@ package toml
 
 import (
 	"fmt"
-  "io"
+	"io"
 )
 
 type parser struct {

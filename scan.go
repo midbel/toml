@@ -2,10 +2,10 @@ package toml
 
 import (
 	"bytes"
-  "io"
+	"io"
 	"io/ioutil"
 	"os"
-  "strings"
+	"strings"
 	"unicode/utf8"
 )
 
