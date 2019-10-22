@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"os"
 	"strings"
 	"unicode/utf8"
 )
@@ -52,15 +51,6 @@ type Scanner struct {
 	line   int
 	column int
 	rowlen int
-}
-
-func ScanFile(file string) (*Scanner, error) {
-	r, err := os.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	return Scan(r)
 }
 
 func Scan(r io.Reader) (*Scanner, error) {

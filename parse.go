@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-type parser struct {
+type Parser struct {
 	scan *Scanner
 	peek Token
 	curr Token
@@ -21,14 +21,14 @@ func Parse(r io.Reader) (Node, error) {
 	s.KeepMultiline = false
 	s.KeepComment = false
 
-	p := parser{scan: s}
+	p := Parser{scan: s}
 	p.next()
 	p.next()
 
 	return p.Parse()
 }
 
-func (p *parser) Parse() (Node, error) {
+func (p *Parser) Parse() (Node, error) {
 	p.skipNewline()
 
 	var t table
@@ -49,7 +49,7 @@ func (p *parser) Parse() (Node, error) {
 	return &t, p.err
 }
 
-func (p *parser) parseTable(t *table) error {
+func (p *Parser) parseTable(t *table) error {
 	var (
 		a table
 		k = regularTable
@@ -97,7 +97,7 @@ func (p *parser) parseTable(t *table) error {
 	return err
 }
 
-func (p *parser) parseOptions(t *table) error {
+func (p *Parser) parseOptions(t *table) error {
 	for {
 		if p.isDone() || p.curr.Type == lsquare {
 			break
@@ -115,7 +115,7 @@ func (p *parser) parseOptions(t *table) error {
 	return nil
 }
 
-func (p *parser) parseOption(t *table, dotted bool) error {
+func (p *Parser) parseOption(t *table, dotted bool) error {
 	var key Token
 	for {
 		if !p.curr.IsKey() {
@@ -146,7 +146,7 @@ func (p *parser) parseOption(t *table, dotted bool) error {
 	return err
 }
 
-func (p *parser) parseInline() (Node, error) {
+func (p *Parser) parseInline() (Node, error) {
 	t := table{
 		kind: inlineTable,
 	}
@@ -169,7 +169,7 @@ func (p *parser) parseInline() (Node, error) {
 	return &t, nil
 }
 
-func (p *parser) parseArray() (Node, error) {
+func (p *Parser) parseArray() (Node, error) {
 	p.skipNewline()
 
 	var (
@@ -203,7 +203,7 @@ func (p *parser) parseArray() (Node, error) {
 	return &arr, nil
 }
 
-func (p *parser) parseValue() (Node, error) {
+func (p *Parser) parseValue() (Node, error) {
 	var (
 		n   Node
 		err error
@@ -221,7 +221,7 @@ func (p *parser) parseValue() (Node, error) {
 	return n, err
 }
 
-func (p *parser) parseLiteral() (Node, error) {
+func (p *Parser) parseLiteral() (Node, error) {
 	switch p.curr.Type {
 	case String:
 	case Integer:
@@ -231,29 +231,37 @@ func (p *parser) parseLiteral() (Node, error) {
 	case Time:
 	case Bool:
 	default:
-		return nil, fmt.Errorf("unexpected token type %s", p.curr)
+		return nil, unexpectedToken(p.curr)
 	}
 	return literal{token: p.curr}, nil
 }
 
-func (p *parser) next() {
+func (p *Parser) next() {
 	p.curr = p.peek
 	p.peek = p.scan.Scan()
 }
 
-func (p *parser) consume(want rune) bool {
+func (p *Parser) consume(want rune) bool {
 	return !(p.curr.Type == want || p.isDone())
 }
 
-func (p *parser) skipNewline() {
+func (p *Parser) skipNewline() {
 	for p.curr.Type == Newline {
 		p.next()
 	}
 }
 
-func (p *parser) isDone() bool {
+func (p *Parser) isDone() bool {
 	if p.curr.Type == Illegal {
-		p.err = fmt.Errorf("unexpected token: %s", p.curr)
+		p.err = unexpectedToken(p.curr)
 	}
 	return p.curr.Type == EOF || p.curr.Type == Illegal
+}
+
+func unexpectedToken(curr Token) error {
+	return fmt.Errorf("%s %w: unexpected token %s", curr.Pos, ErrSyntax, curr)
+}
+
+func duplicateOption(opt option) error {
+	return fmt.Errorf("%s %w: %s (%s)", opt.key.Pos, ErrDuplicate, opt.key.Literal, opt.value)
 }

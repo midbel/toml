@@ -19,14 +19,6 @@ var (
 	ErrDuplicate = errors.New("duplicate option")
 )
 
-func unexpectedToken(curr Token) error {
-	return fmt.Errorf("%s %w: unexpected token %s", curr.Pos, ErrSyntax, curr)
-}
-
-func duplicateOption(opt option) error {
-	return fmt.Errorf("%s %w: %s (%s)", opt.key.Pos, ErrDuplicate, opt.key.Literal, opt.value)
-}
-
 func DecodeFile(file string, v interface{}) error {
 	r, err := os.Open(file)
 	if err != nil {
