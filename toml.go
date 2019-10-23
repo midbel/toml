@@ -16,7 +16,8 @@ const tomlTag = "toml"
 
 var (
 	ErrSyntax    = errors.New("invalid syntax")
-	ErrDuplicate = errors.New("duplicate option")
+	ErrDuplicate = errors.New("duplicate")
+	ErrUnknown   = errors.New("unknown")
 )
 
 func DecodeFile(file string, v interface{}) error {
@@ -124,8 +125,6 @@ func decodeStruct(t *table, v reflect.Value) error {
 			} else {
 				err = decodeTable(n, v)
 			}
-		default:
-			err = fmt.Errorf("unexpected node type %T", n)
 		}
 		if err != nil {
 			break
@@ -148,8 +147,6 @@ func decodeArrayOption(a *array, v reflect.Value) error {
 			err = decodeArrayOption(x, f)
 		case *table:
 			err = decodeTable(x, f)
-		default:
-			err = fmt.Errorf("unexpected type %T", a.nodes[i])
 		}
 		if err != nil {
 			break
@@ -168,8 +165,6 @@ func decodeOption(o option, v reflect.Value) error {
 		err = decodeArrayOption(x, v)
 	case *table:
 		err = decodeTable(x, v)
-	default:
-		err = fmt.Errorf("unexpected option type %T", x)
 	}
 	return err
 }
@@ -323,7 +318,7 @@ func (o object) Get(str string) (v reflect.Value, err error) {
 	if ok {
 		v = o.fields[i]
 	} else {
-		err = fmt.Errorf("%s: option not found for %s", str, o.typ)
+		err = fmt.Errorf("%s: table/option %w", str, ErrUnknown)
 	}
 	return
 }
