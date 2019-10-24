@@ -38,10 +38,20 @@ var escapes = map[rune]rune{
 	'\\': backslash,
 }
 
+type scanMode int8
+
+const (
+	scanKey scanMode = iota
+	scanValue
+)
+
 type Scanner struct {
 	buffer []byte
 	pos    int
 	next   int
+
+	mode scanMode
+	stack uint
 
 	char rune
 
@@ -64,6 +74,7 @@ func Scan(r io.Reader) (*Scanner, error) {
 		column:        0,
 		KeepComment:   false,
 		KeepMultiline: false,
+		mode: scanKey,
 	}
 	s.readRune()
 
@@ -82,6 +93,7 @@ func (s *Scanner) Scan() Token {
 		Line:   s.line,
 		Column: s.column,
 	}
+	s.switchMode()
 	switch {
 	default:
 		t.Type = Illegal
@@ -91,9 +103,9 @@ func (s *Scanner) Scan() Token {
 			s.readRune()
 			return s.Scan()
 		}
-	case isLetter(s.char):
+	case isLetter(s.char) || (s.mode == scanKey && isDigit(s.char)):
 		s.scanIdent(&t)
-	case isDigit(s.char) || isSign(s.char):
+	case (s.mode == scanValue && isDigit(s.char)) || isSign(s.char):
 		s.scanNumber(&t)
 	case isQuote(s.char):
 		s.scanString(&t)
@@ -110,6 +122,21 @@ func (s *Scanner) Scan() Token {
 
 	t.Pos = pos
 	return t
+}
+
+func (s *Scanner) switchMode() {
+	if s.isNewline() && s.mode == scanValue && s.stack == 0 {
+		s.mode = scanKey
+		return
+	}
+	switch {
+	case s.mode == scanValue && (s.char == lcurly || s.char == lsquare):
+		s.stack++
+	case s.mode == scanValue && (s.char == rcurly || s.char == rsquare):
+		s.stack--
+	case s.mode == scanKey && s.char == equal:
+		s.mode = scanValue
+	}
 }
 
 func (s *Scanner) readRuneN(n int) int {
