@@ -77,6 +77,9 @@ func Scan(r io.Reader) (*Scanner, error) {
 		mode:          scanKey,
 	}
 	s.readRune()
+	for s.isNewline() {
+		s.readRune()
+	}
 
 	return &s, nil
 }
@@ -99,9 +102,11 @@ func (s *Scanner) Scan() Token {
 		t.Type = Illegal
 	case isComment(s.char):
 		s.scanComment(&t)
+		s.readRune()
 		if !s.KeepComment {
-			s.readRune()
 			return s.Scan()
+		} else {
+			s.readRune()
 		}
 	case isLetter(s.char) || (s.mode == scanKey && isDigit(s.char)):
 		s.scanIdent(&t)
@@ -448,13 +453,14 @@ func (s *Scanner) scanIntegerWith(t *Token, pos int, accept func(rune) bool) {
 	}
 	for {
 		if isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF {
+			s.unreadRune()
 			break
 		}
 		if accept != nil && !accept(s.char) {
 			t.Type = Illegal
 		}
 		if s.char == underscore {
-			if !(isDigit(prev) || isDigit(s.peekRune())) {
+			if !(accept(prev) || accept(s.peekRune())) {
 				t.Type = Illegal
 			}
 		}

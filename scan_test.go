@@ -7,15 +7,22 @@ import (
 
 func TestScannerScan(t *testing.T) {
 	doc := `
+# comment
+
 "bool" = true
 "bool" = false
 
 [number]
-integer = 100
-positive = +100
-negative = -100
-float1   = 3.14
-float2   = 1e16
+integer    = 100
+positive   = +100
+negative   = -100
+underscore = 123_456
+hexa       = 0xdead_beef
+octal      = 0o1234567
+binary     = 0b0000001
+zero       = 0
+float1     = 3.14
+float2     = 1e16
 
 [strings]
 empty1  = ""
@@ -23,9 +30,19 @@ empty2  = ''
 basic   = "basic string"
 literal = "literal string"
 
+multiline1 = """\
+       The quick brown \
+       fox jumps over \
+       the lazy dog.\
+"""
+multiline2 = """
+Roses are red
+Violets are blue"""
+
 [date]
 odt1 = 2019-10-24T19:07:54Z
 odt2 = 2019-10-24 19:07:54+02:00
+odt3 = 2019-10-24T19:07:54.123Z
 date = 2019-10-24
 time = 19:07:54
 
@@ -41,6 +58,7 @@ inline = {key = "foo", active = true, number = 100}
 `
 
 	tokens := []Token{
+		{Literal: "comment", Type: Comment},
 		{Literal: "bool", Type: String},
 		{Type: equal},
 		{Literal: "true", Type: Bool},
@@ -64,6 +82,26 @@ inline = {key = "foo", active = true, number = 100}
 		{Literal: "negative", Type: Ident},
 		{Type: equal},
 		{Literal: "-100", Type: Integer},
+		{Type: Newline},
+		{Literal: "underscore", Type: Ident},
+		{Type: equal},
+		{Literal: "123_456", Type: Integer},
+		{Type: Newline},
+		{Literal: "hexa", Type: Ident},
+		{Type: equal},
+		{Literal: "0xdead_beef", Type: Integer},
+		{Type: Newline},
+		{Literal: "octal", Type: Ident},
+		{Type: equal},
+		{Literal: "0o1234567", Type: Integer},
+		{Type: Newline},
+		{Literal: "binary", Type: Ident},
+		{Type: equal},
+		{Literal: "0b0000001", Type: Integer},
+		{Type: Newline},
+		{Literal: "zero", Type: Ident},
+		{Type: equal},
+		{Literal: "0", Type: Integer},
 		{Type: Newline},
 		{Literal: "float1", Type: Ident},
 		{Type: equal},
@@ -93,6 +131,14 @@ inline = {key = "foo", active = true, number = 100}
 		{Type: equal},
 		{Literal: "literal string", Type: String},
 		{Type: Newline},
+		{Literal: "multiline1", Type: Ident},
+		{Type: equal},
+		{Literal: "The quick brown fox jumps over the lazy dog.", Type: String},
+		{Type: Newline},
+		{Literal: "multiline2", Type: Ident},
+		{Type: equal},
+		{Literal: "Roses are red\nViolets are blue", Type: String},
+		{Type: Newline},
 		{Type: lsquare},
 		{Literal: "date", Type: Ident},
 		{Type: rsquare},
@@ -104,6 +150,10 @@ inline = {key = "foo", active = true, number = 100}
 		{Literal: "odt2", Type: Ident},
 		{Type: equal},
 		{Literal: "2019-10-24 19:07:54+02:00", Type: DateTime},
+		{Type: Newline},
+		{Literal: "odt3", Type: Ident},
+		{Type: equal},
+		{Literal: "2019-10-24T19:07:54.123Z", Type: DateTime},
 		{Type: Newline},
 		{Literal: "date", Type: Ident},
 		{Type: equal},
@@ -180,23 +230,28 @@ inline = {key = "foo", active = true, number = 100}
 
 	s, err := Scan(strings.NewReader(strings.TrimSpace(doc)))
 	if err != nil {
-		t.Errorf("fail to prepare scanner: %s", err)
+		t.Fatalf("fail to prepare scanner: %s", err)
 	}
+	s.KeepComment = true
 	s.KeepMultiline = false
 
 	var i int
 	for got := s.Scan(); got.Type != EOF; got = s.Scan() {
 		if got.Type == Illegal {
-			t.Errorf("<%s> illegal token found: %s", got.Pos, got)
+			t.Fatalf("<%s> illegal token found: %s", got.Pos, got)
 		}
 		want := tokens[i]
 		if want.Type != got.Type || want.Literal != got.Literal {
-			t.Errorf("<%s> unexpected token: want %s, %s", got.Pos, want, got)
+			t.Fatalf("<%s> unexpected token: want %s, got %s", got.Pos, want, got)
 		}
 		i++
 		if i >= len(tokens) {
-			t.Errorf("too many tokens")
+			t.Fatalf("too many tokens")
 			break
 		}
+	}
+	got := s.Scan()
+	if got.Type != EOF {
+		t.Fatalf("last token is not EOF")
 	}
 }
