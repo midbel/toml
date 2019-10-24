@@ -1,7 +1,7 @@
 package toml
 
 import (
-  "time"
+	"time"
 )
 
 type Dependency struct {

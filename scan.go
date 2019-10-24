@@ -50,7 +50,7 @@ type Scanner struct {
 	pos    int
 	next   int
 
-	mode scanMode
+	mode  scanMode
 	stack uint
 
 	char rune
@@ -74,7 +74,7 @@ func Scan(r io.Reader) (*Scanner, error) {
 		column:        0,
 		KeepComment:   false,
 		KeepMultiline: false,
-		mode: scanKey,
+		mode:          scanKey,
 	}
 	s.readRune()
 
