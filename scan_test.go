@@ -23,6 +23,10 @@ binary     = 0b0000001
 zero       = 0
 float1     = 3.14
 float2     = 1e16
+float3     = 3.14_15
+float4     = -1e16_185
+float5     = +3.14E1_987
+
 
 [strings]
 empty1  = ""
@@ -110,6 +114,18 @@ inline = {key = "foo", active = true, number = 100}
 		{Literal: "float2", Type: Ident},
 		{Type: equal},
 		{Literal: "1e16", Type: Float},
+		{Type: Newline},
+		{Literal: "float3", Type: Ident},
+		{Type: equal},
+		{Literal: "3.14_15", Type: Float},
+		{Type: Newline},
+		{Literal: "float4", Type: Ident},
+		{Type: equal},
+		{Literal: "-1e16_185", Type: Float},
+		{Type: Newline},
+		{Literal: "float5", Type: Ident},
+		{Type: equal},
+		{Literal: "3.14E1_987", Type: Float},
 		{Type: Newline},
 		{Type: lsquare},
 		{Literal: "strings", Type: Ident},

@@ -167,9 +167,6 @@ func (s *Scanner) readRune() {
 		s.next = len(s.buffer)
 	}
 	s.char, s.pos, s.next = r, s.next, s.next+n
-	if s.char == carriage {
-		s.readRune()
-	}
 	if s.char == newline {
 		s.line++
 		s.rowlen, s.column = s.column, 0
@@ -192,9 +189,6 @@ func (s *Scanner) unreadRune() {
 
 	s.next, s.pos = s.pos, s.pos-utf8.RuneLen(s.char)
 	s.char, _ = utf8.DecodeRune(s.buffer[s.pos:])
-	if s.char == carriage {
-		s.unreadRune()
-	}
 }
 
 func (s *Scanner) peekRune() rune {
@@ -388,7 +382,7 @@ func (s *Scanner) scanExponent(t *Token) int {
 		offset++
 	}
 	for {
-		if !isDigit(s.char) {
+		if !isDigit(s.char) && s.char != underscore {
 			t.Type = Illegal
 			return offset
 		}
