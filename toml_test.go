@@ -1,6 +1,8 @@
 package toml
 
 import (
+	"os"
+	"testing"
 	"time"
 )
 
@@ -38,4 +40,54 @@ type Package struct {
 
 	Deps []Dependency `toml:"dependency"`
 	Logs []Changelog  `toml:"changelog"`
+}
+
+func TestDecode(t *testing.T) {
+	t.Run("values", testDecodeValues)
+	t.Run("pointers", testDecodePointers)
+}
+
+func testDecodeValues(t *testing.T) {
+	p := struct {
+		Name     string `toml:"package"`
+		Version  string
+		Repo     string `toml:"repository"`
+		Provides []string
+		Revision int
+
+		Dev
+
+		Deps []Dependency `toml:"dependency"`
+		Logs []Changelog  `toml:"changelog"`
+	}{}
+	if err := decodeFile(&p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodePointers(t *testing.T) {
+	p := struct {
+		Name     string `toml:"package"`
+		Version  string
+		Repo     string `toml:"repository"`
+		Provides []string
+		Revision int
+
+		*Dev
+
+		Deps []*Dependency `toml:"dependency"`
+		Logs []*Changelog  `toml:"changelog"`
+	}{}
+	if err := decodeFile(&p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodeFile(p interface{}) error {
+	r, err := os.Open("testdata/package.toml")
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return Decode(r, p)
 }
