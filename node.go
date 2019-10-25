@@ -103,10 +103,12 @@ func (t *table) getOrCreateTable(k Token) (*table, error) {
 		case *table:
 			if x.kind == arrayTable {
 				if len(x.nodes) > 0 {
-					x = x.nodes[len(x.nodes)-1].(*table)
+					return x.nodes[len(x.nodes)-1].(*table), nil
 				}
 			}
-			return x, nil
+			if x.key.Literal == k.Literal {
+				return x, nil
+			}
 		}
 	}
 	x := &table{
