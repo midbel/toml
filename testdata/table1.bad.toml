@@ -1,0 +1,6 @@
+# can not declare twice the same table
+[a]
+key = 1
+
+[a]
+key = 2
