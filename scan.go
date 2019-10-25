@@ -236,8 +236,8 @@ func (s *Scanner) scanNumber(t *Token) {
 			}
 			s.readRune()
 
-			offset := s.scanTime(t)+2
-			t.Literal = string(s.buffer[pos: pos+offset])
+			offset := s.scanTime(t) + 2
+			t.Literal = string(s.buffer[pos : pos+offset])
 			return
 		case isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF:
 			t.Literal = "0"
