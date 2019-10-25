@@ -7,31 +7,37 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	files := []struct {
-		File  string
-		Valid bool
-	}{
-		{File: "numbers.toml", Valid: true},
-		{File: "strings.toml", Valid: true},
-		{File: "booleans.toml", Valid: true},
-		{File: "dates.toml", Valid: true},
-		{File: "arrays.toml", Valid: true},
-		{File: "inlines.toml", Valid: true},
-		{File: "inline2.bad.toml", Valid: false},
-		{File: "package.toml", Valid: true},
+	files := []string{
+		"numbers",
+		"strings",
+		"booleans",
+		"arrays",
+		"array1.bad",
+		"array2.bad",
+		"inlines",
+		"inline1.bad",
+		"inline2.bad",
+		"keys",
+		"key1.bad",
+		"key2.bad",
+		"key3.bad",
+		"package",
 	}
 	for _, f := range files {
-		r, err := os.Open(filepath.Join("testdata", f.File))
+		file := f + ".toml"
+
+		r, err := os.Open(filepath.Join("testdata", file))
 		if err != nil {
 			t.Error(err)
 			continue
 		}
 
+		valid := filepath.Ext(f) == ""
 		switch _, err := Parse(r); {
-		case f.Valid && err != nil:
-			t.Errorf("%s: %s", f.File, err)
-		case !f.Valid && err == nil:
-			t.Errorf("%s: invalid document not detected", f.File)
+		case valid && err != nil:
+			t.Errorf("%s: %s", file, err)
+		case !valid && err == nil:
+			t.Errorf("%s: invalid document not detected", file)
 		}
 		r.Close()
 	}
