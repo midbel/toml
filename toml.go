@@ -89,7 +89,12 @@ func decodeTable(t *table, v reflect.Value) error {
 	case reflect.Struct:
 		err = decodeStruct(t, v)
 	case reflect.Map:
-		err = decodeMap(t, v)
+		k := v.Type().Key()
+		if k.Kind() != reflect.String {
+			err = fmt.Errorf("map key should be of type string")
+		} else {
+			err = decodeMap(t, v)
+		}
 	default:
 		err = fmt.Errorf("can not decode table into %s", k)
 	}
@@ -97,10 +102,6 @@ func decodeTable(t *table, v reflect.Value) error {
 }
 
 func decodeMap(t *table, v reflect.Value) error {
-	// k := v.Type().Key()
-	// if k := k.Kind(); k != reflect.String {
-	// 	return fmt.Errorf("can not decode into given map")
-	// }
 	// for i := range t.nodes {
 	// 	switch n := t.nodes[i].(type) {
 	// 	case *table:
