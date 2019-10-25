@@ -59,6 +59,14 @@ func (t Token) IsValid() bool {
 	return t.Type != Illegal
 }
 
+func (t Token) IsNumber() bool {
+	return t.Type == Integer || t.Type == Float
+}
+
+func (t Token) IsTime() bool {
+	return t.Type == DateTime || t.Type == Date || t.Type == Time
+}
+
 func (t Token) String() string {
 	var str string
 	switch t.Type {
