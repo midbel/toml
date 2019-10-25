@@ -48,7 +48,8 @@ odt1 = 2019-10-24T19:07:54Z
 odt2 = 2019-10-24 19:07:54+02:00
 odt3 = 2019-10-24T19:07:54.123Z
 date = 2019-10-24
-time = 19:07:54
+time1 = 19:07:54
+time2 = 09:07:54
 
 [container]
 array1 = [1, 2, 3, ]
@@ -175,9 +176,13 @@ inline = {key = "foo", active = true, number = 100}
 		{Type: equal},
 		{Literal: "2019-10-24", Type: Date},
 		{Type: Newline},
-		{Literal: "time", Type: Ident},
+		{Literal: "time1", Type: Ident},
 		{Type: equal},
 		{Literal: "19:07:54", Type: Time},
+		{Type: Newline},
+		{Literal: "time2", Type: Ident},
+		{Type: equal},
+		{Literal: "09:07:54", Type: Time},
 		{Type: Newline},
 		{Type: lsquare},
 		{Literal: "container", Type: Ident},

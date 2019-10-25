@@ -341,6 +341,9 @@ func (s *Scanner) scanTime(t *Token) int {
 	if offset += s.readRuneN(3); s.char == dot {
 		offset += s.scanMillis(t)
 	}
+	if s.isNewline() || isPunct(s.char) || s.char == EOF {
+		s.unreadRune()
+	}
 	return offset
 }
 
