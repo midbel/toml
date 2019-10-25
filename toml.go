@@ -38,7 +38,20 @@ func Decode(r io.Reader, v interface{}) error {
 	if !ok {
 		return fmt.Errorf("root node is not a table!") // should never happen
 	}
-	return decodeTable(root, reflect.ValueOf(v).Elem())
+	e := reflect.ValueOf(v)
+	if e.Kind() != reflect.Ptr || e.IsNil() {
+		return fmt.Errorf("invalid given type %s", e.Type())
+	}
+	if e.Kind() == reflect.Interface && e.NumMethod() == 0 {
+		m := make(map[string]interface{})
+		me := reflect.ValueOf(m).Elem()
+		if err = decodeMap(root, me); err == nil {
+			e.Set(me)
+		}
+	} else {
+		err = decodeTable(root, e.Elem())
+	}
+	return err
 }
 
 func decodeTableArray(t *table, v reflect.Value) error {

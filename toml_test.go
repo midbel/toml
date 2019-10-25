@@ -47,6 +47,13 @@ func TestDecode(t *testing.T) {
 	t.Run("pointers", testDecodePointers)
 }
 
+func testDecodeInterface(t *testing.T) {
+	var m interface{}
+	if err := decodeFile(&m); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func testDecodeValues(t *testing.T) {
 	p := struct {
 		Name     string `toml:"package"`
