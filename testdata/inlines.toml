@@ -5,3 +5,5 @@ array = [
   {string="foo", bool=true, number=123},
   {string="false", bool=true, number=456},
 ]
+
+empty = {}

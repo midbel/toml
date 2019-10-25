@@ -15,14 +15,14 @@ site."google.com" = "test"
 about.description = "description"
 about.url = "https://github.com/midbel/toml"
 
-x.type = ""
-y.type = ""
-
-x.name = ""
-y.name = ""
-
-x.data = ""
-y.data = ""
+# x.type = ""
+# y.type = ""
+#
+# x.name = ""
+# y.name = ""
+#
+# x.data = ""
+# y.data = ""
 
 a.b.c = 1
 a.d   = 2

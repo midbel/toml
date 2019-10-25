@@ -21,6 +21,8 @@ func TestParse(t *testing.T) {
 		"key1.bad",
 		"key2.bad",
 		"key3.bad",
+		"key4.bad",
+		"key5.bad",
 		"package",
 	}
 	for _, f := range files {
