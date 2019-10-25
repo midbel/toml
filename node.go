@@ -113,7 +113,8 @@ func (t *table) getOrCreateTable(k Token) (*table, error) {
 	}
 	x := &table{
 		key:  k,
-		kind: regularTable,
+		kind: abstractTable,
+		// kind: regularTable,
 	}
 	if err := t.appendTable(x); err != nil {
 		return nil, err
@@ -144,6 +145,9 @@ func (t *table) appendTable(a *table) error {
 				err = fmt.Errorf("%s: table %s already exists", a.key.Pos, x.key.Literal)
 			}
 			if x.kind == arrayTable && x.key.Literal == a.key.Literal {
+				if a.kind != itemTable {
+					return fmt.Errorf("%s: can not append regular table to array %s", a.key.Pos, x.key.Literal)
+				}
 				x.nodes = append(x.nodes, a)
 				return nil
 			}
@@ -183,6 +187,9 @@ func (t *table) appendOption(o option) error {
 	}
 	if err == nil {
 		t.nodes = appendNodes(t.nodes, o, ix)
+		if t.kind == abstractTable {
+			t.kind = regularTable
+		}
 	}
 	return err
 }
@@ -235,20 +242,24 @@ func dumpNode(n Node, level int) {
 		fmt.Println()
 	case *table:
 		if x.kind == arrayTable {
-			fmt.Printf("%sarray[", strings.Repeat(" ", level*2))
+			fmt.Printf("%sarray{", strings.Repeat(" ", level*2))
 			fmt.Println()
 			for _, n := range sortNodes(x.nodes) {
 				dumpNode(n, level+2)
 			}
-			fmt.Printf("%s],", strings.Repeat(" ", level*2))
+			fmt.Printf("%s},", strings.Repeat(" ", level*2))
 			fmt.Println()
 		} else {
-			fmt.Printf("%stable(%s<%s>)[", strings.Repeat(" ", level*2), x.key.Literal, x.Pos())
+			label := x.key.Literal
+			if label == "" {
+				label = "default"
+			}
+			fmt.Printf("%stable[label=%s, kind=%s, pos= %s]{", strings.Repeat(" ", level*2), label, x.kind, x.Pos())
 			fmt.Println()
 			for _, n := range sortNodes(x.nodes) {
 				dumpNode(n, level+2)
 			}
-			fmt.Printf("%s],", strings.Repeat(" ", level*2))
+			fmt.Printf("%s},", strings.Repeat(" ", level*2))
 			fmt.Println()
 		}
 	}
