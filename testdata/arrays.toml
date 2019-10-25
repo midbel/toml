@@ -1,0 +1,14 @@
+array1 = [ 1, 2, 3 ]
+array2 = [ 1.0, 2.0, ]
+array3 = [true, false]
+array4 = ["foo", "bar"]
+array5 = ['foo', "bar"]
+array6 = ["foo", 'bar']
+array7 = [
+  2019-10-25 09:21:00Z,
+  2019-10-25T09:21:00.123+02:00,
+]
+array8 = [
+  2019-10-25,
+  2019-10-25
+]
