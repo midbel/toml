@@ -229,6 +229,16 @@ func (s *Scanner) scanNumber(t *Token) {
 			accept = isOctal
 		case s.char == 'b':
 			accept = isBinary
+		case isDigit(s.char):
+			if peek := s.peekRune(); peek != colon {
+				t.Type = Illegal
+				return
+			}
+			s.readRune()
+
+			offset := s.scanTime(t)+2
+			t.Literal = string(s.buffer[pos: pos+offset])
+			return
 		case isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF:
 			t.Literal = "0"
 			s.unreadRune()
