@@ -9,6 +9,8 @@ import (
 func TestParse(t *testing.T) {
 	files := []string{
 		"numbers",
+		"number1.bad",
+		"number2.bad",
 		"strings",
 		"booleans",
 		"arrays",

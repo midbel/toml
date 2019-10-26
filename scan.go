@@ -243,8 +243,9 @@ Loop:
 			prev = s.char
 			offset++
 		case s.char == underscore:
-			if !(isDigit(prev) || isDigit(s.peekRune())) {
+			if !(isDigit(prev) && isDigit(s.peekRune())) {
 				t.Type = Illegal
+			} else {
 			}
 			offset++
 		case s.char == dot:
@@ -442,8 +443,9 @@ func (s *Scanner) scanIntegerWith(t *Token, pos int, accept func(rune) bool) {
 			t.Type = Illegal
 		}
 		if s.char == underscore {
-			if !(accept(prev) || accept(s.peekRune())) {
+			if !(accept(prev) && accept(s.peekRune())) {
 				t.Type = Illegal
+				break
 			}
 		}
 		s.readRune()
