@@ -51,6 +51,19 @@ func Unmarshal(bs []byte, v interface{}) error {
 	return NewDecoder(bytes.NewReader(bs)).Decode(v)
 }
 
+func DecodeFile(file string, v interface{}) error {
+	r, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return Decode(r, v)
+}
+
+func Decode(r io.Reader, v interface{}) error {
+	return NewDecoder(r).Decode(v)
+}
+
 func NewDecoder(r io.Reader) *Decoder {
 	s := scan.NewScanner(r)
 	return &Decoder{s}
