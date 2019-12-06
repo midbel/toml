@@ -14,7 +14,6 @@ func TestParse(t *testing.T) {
 		"strings",
 		"booleans",
 		"arrays",
-		"array1.bad",
 		"array2.bad",
 		"inlines",
 		"inline1.bad",

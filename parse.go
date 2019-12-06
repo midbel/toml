@@ -172,14 +172,8 @@ func (p *Parser) parseInline() (Node, error) {
 func (p *Parser) parseArray() (Node, error) {
 	p.skipNewline()
 
-	var (
-		arr array
-		typ = p.curr.Type
-	)
+	var arr array
 	for p.consume(rsquare) {
-		if p.curr.Type != typ {
-			return nil, unexpectedToken(p.curr)
-		}
 		n, err := p.parseValue()
 		if err != nil {
 			return nil, err
