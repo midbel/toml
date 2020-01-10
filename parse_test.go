@@ -33,7 +33,10 @@ func TestParse(t *testing.T) {
 		"table5.bad",
 		"table6.bad",
 		"package",
-		"fruits",
+		"fruits1",
+		"fruits2",
+		"fruits1.bad",
+		"fruits2.bad",
 		"example",
 	}
 	for _, f := range files {

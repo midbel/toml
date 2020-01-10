@@ -101,12 +101,12 @@ func (t *table) getOrCreateTable(k Token) (*table, error) {
 				return nil, fmt.Errorf("%s: option %s already exists", x.key.Pos, k.Literal)
 			}
 		case *table:
-			if x.kind == arrayTable {
-				if len(x.nodes) > 0 {
-					return x.nodes[len(x.nodes)-1].(*table), nil
-				}
+			if x.key.Literal != k.Literal {
+				break
 			}
-			if x.key.Literal == k.Literal {
+			if x.kind == arrayTable && len(x.nodes) > 0 {
+				return x.nodes[len(x.nodes)-1].(*table), nil
+			} else {
 				return x, nil
 			}
 		}
@@ -114,7 +114,6 @@ func (t *table) getOrCreateTable(k Token) (*table, error) {
 	x := &table{
 		key:  k,
 		kind: abstractTable,
-		// kind: regularTable,
 	}
 	if err := t.appendTable(x); err != nil {
 		return nil, err
@@ -126,14 +125,13 @@ func (t *table) appendTable(a *table) error {
 	if t.isFrozen() {
 		return fmt.Errorf("can not extend %s table", t.kind)
 	}
-	var err error
 
 	ix := searchNodes(a.key.Literal, t.nodes)
 	if ix < len(t.nodes) {
 		switch x := t.nodes[ix].(type) {
 		case option:
 			if x.key.Literal == a.key.Literal {
-				err = fmt.Errorf("%s: option %s already exists", a.key.Pos, x.key.Literal)
+				return fmt.Errorf("%s: option %s already exists", a.key.Pos, x.key.Literal)
 			}
 		case *table:
 			if x.kind == abstractTable && x.key.Literal == a.key.Literal {
@@ -142,7 +140,7 @@ func (t *table) appendTable(a *table) error {
 				return nil
 			}
 			if x.kind != arrayTable && x.key.Literal == a.key.Literal {
-				err = fmt.Errorf("%s: table %s already exists", a.key.Pos, x.key.Literal)
+				return fmt.Errorf("%s: table %s already exists", a.key.Pos, x.key.Literal)
 			}
 			if x.kind == arrayTable && x.key.Literal == a.key.Literal {
 				if a.kind != itemTable {
@@ -152,26 +150,25 @@ func (t *table) appendTable(a *table) error {
 				return nil
 			}
 		default:
-			err = fmt.Errorf("unexpected element type: %T (%[1]s)", x)
+			return fmt.Errorf("unexpected element type: %T (%[1]s)", x)
 		}
 	}
-	if err == nil {
-		if a.kind == itemTable {
-			n := table{
-				kind:  arrayTable,
-				key:   a.key,
-				nodes: []Node{a},
-			}
-			a = &n
+	if a.kind == itemTable {
+		n := table{
+			kind:  arrayTable,
+			key:   a.key,
+			nodes: []Node{a},
 		}
-		t.nodes = appendNodes(t.nodes, a, ix)
+		a = &n
 	}
-	return err
+	t.nodes = appendNodes(t.nodes, a, ix)
+	return nil
 }
 
 func (t *table) appendOption(o option) error {
-	var err error
-
+	if t.kind == arrayTable {
+		return fmt.Errorf("can not append options to table array")
+	}
 	ix := searchNodes(o.key.Literal, t.nodes)
 	if ix < len(t.nodes) {
 		switch x := t.nodes[ix].(type) {
@@ -180,18 +177,18 @@ func (t *table) appendOption(o option) error {
 				return duplicateOption(o)
 			}
 		case *table:
-			err = fmt.Errorf("%s: table %s already exists", o.key.Pos, x.key.Literal)
+			if x.key.Literal == o.key.Literal {
+				return fmt.Errorf("%s: table %s already exists", o.key.Pos, x.key.Literal)
+			}
 		default:
-			err = fmt.Errorf("unexpected element type: %T (%[1]s)", x)
+			return fmt.Errorf("unexpected element type: %T (%[1]s)", x)
 		}
 	}
-	if err == nil {
-		t.nodes = appendNodes(t.nodes, o, ix)
-		if t.kind == abstractTable {
-			t.kind = regularTable
-		}
+	t.nodes = appendNodes(t.nodes, o, ix)
+	if t.kind == abstractTable {
+		t.kind = regularTable
 	}
-	return err
+	return nil
 }
 
 func appendNodes(nodes []Node, n Node, at int) []Node {
