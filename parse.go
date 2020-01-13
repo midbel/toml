@@ -44,18 +44,20 @@ func (p *Parser) parseTable(t *Table) error {
 }
 
 func (p *Parser) parseOptions(t *Table) error {
-	fmt.Println("> parseOptions")
 	for !p.isDone() {
 		if p.curr.Type == lsquare {
 			break
 		}
-		_, err := p.parseOption()
+		opt, err := p.parseOption(true)
 		if err != nil {
 			return err
 		}
 		p.nextToken()
 		if p.curr.Type != Newline {
 			return p.unexpectedToken("newline")
+		}
+		if err := t.Append(opt); err != nil {
+			return err
 		}
 		p.nextToken()
 	}
@@ -65,12 +67,17 @@ func (p *Parser) parseOptions(t *Table) error {
 	return nil
 }
 
-func (p *Parser) parseOption() (Node, error) {
-	fmt.Println("> parseOption")
+func (p *Parser) parseOption(dotted bool) (Node, error) {
 	if !p.curr.IsIdent() {
 		return nil, p.unexpectedToken("ident")
 	}
-	fmt.Println(">> option:", p.curr.Literal)
+	if p.peek.Type == dot {
+		if dotted {
+
+		} else {
+			return nil, p.unexpectedToken("equal")
+		}
+	}
 	var (
 		opt = Option{key: p.curr}
 		err error
@@ -95,7 +102,6 @@ func (p *Parser) parseOption() (Node, error) {
 }
 
 func (p *Parser) parseLiteral() (Node, error) {
-	fmt.Println("> parseLiteral")
 	switch p.curr.Type {
 	default:
 		return nil, p.unexpectedToken("literal")
@@ -108,7 +114,6 @@ func (p *Parser) parseLiteral() (Node, error) {
 }
 
 func (p *Parser) parseArray() (Node, error) {
-	fmt.Println("> parseArray")
 	p.nextToken()
 
 	var a Array
@@ -148,7 +153,6 @@ func (p *Parser) parseArray() (Node, error) {
 }
 
 func (p *Parser) parseInline() (Node, error) {
-	fmt.Println("> parseInline")
 	p.nextToken()
 
 	var t Table
@@ -156,7 +160,7 @@ func (p *Parser) parseInline() (Node, error) {
 		if p.curr.Type == rcurly {
 			break
 		}
-		_, err := p.parseOption()
+		_, err := p.parseOption(false)
 		if err != nil {
 			return nil, err
 		}
