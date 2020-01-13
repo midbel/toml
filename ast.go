@@ -35,7 +35,6 @@ type tableType int
 const (
 	typeAbstract tableType = iota
 	typeRegular
-	typeInline
 	typeArray
 	typeItem
 )

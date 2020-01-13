@@ -44,26 +44,33 @@ func (p *Parser) parseTable(t *Table) error {
 }
 
 func (p *Parser) parseOptions(t *Table) error {
+	fmt.Println("> parseOptions")
 	for !p.isDone() {
 		if p.curr.Type == lsquare {
 			break
 		}
-		opt, err := p.parseOption()
+		_, err := p.parseOption()
 		if err != nil {
 			return err
 		}
-		_ = opt
+		p.nextToken()
+		if p.curr.Type != Newline {
+			return p.unexpectedToken("newline")
+		}
+		p.nextToken()
 	}
-	if p.curr.Type != lsquare {
+	if p.curr.Type != lsquare && !p.isDone() {
 		return p.unexpectedToken("lsquare")
 	}
 	return nil
 }
 
 func (p *Parser) parseOption() (Node, error) {
+	fmt.Println("> parseOption")
 	if !p.curr.IsIdent() {
 		return nil, p.unexpectedToken("ident")
 	}
+	fmt.Println(">> option:", p.curr.Literal)
 	var (
 		opt = Option{key: p.curr}
 		err error
@@ -84,17 +91,14 @@ func (p *Parser) parseOption() (Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.nextToken()
-	if p.curr.Type != Newline {
-		return nil, p.unexpectedToken("newline")
-	}
 	return &opt, nil
 }
 
 func (p *Parser) parseLiteral() (Node, error) {
+	fmt.Println("> parseLiteral")
 	switch p.curr.Type {
 	default:
-		return nil, p.unexpectedToken("literal type")
+		return nil, p.unexpectedToken("literal")
 	case String, Integer, Float, Bool, Date, Time, DateTime:
 		lit := Literal{
 			token: p.curr,
@@ -104,6 +108,7 @@ func (p *Parser) parseLiteral() (Node, error) {
 }
 
 func (p *Parser) parseArray() (Node, error) {
+	fmt.Println("> parseArray")
 	p.nextToken()
 
 	var a Array
@@ -126,15 +131,24 @@ func (p *Parser) parseArray() (Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		p.nextToken()
+		if p.curr.Type == rsquare {
+			break
+		}
+		if p.curr.Type != comma {
+			return nil, p.unexpectedToken("comma")
+		}
+		p.nextToken()
+		_ = node
 	}
 	if p.curr.Type != rsquare {
 		return nil, p.unexpectedToken("rsquare")
 	}
-	p.nextToken()
 	return &a, nil
 }
 
 func (p *Parser) parseInline() (Node, error) {
+	fmt.Println("> parseInline")
 	p.nextToken()
 
 	var t Table
@@ -142,11 +156,25 @@ func (p *Parser) parseInline() (Node, error) {
 		if p.curr.Type == rcurly {
 			break
 		}
+		_, err := p.parseOption()
+		if err != nil {
+			return nil, err
+		}
+		p.nextToken()
+		if p.curr.Type == rcurly {
+			break
+		}
+		if p.curr.Type != comma {
+			return nil, p.unexpectedToken("comma")
+		}
+		if p.peek.Type == rcurly || p.peek.Type == Newline {
+			return nil, p.unexpectedToken("ident")
+		}
+		p.nextToken()
 	}
 	if p.curr.Type != rcurly {
 		return nil, p.unexpectedToken("rcurly")
 	}
-	p.nextToken()
 	return &t, nil
 }
 
@@ -157,6 +185,12 @@ func (p *Parser) nextToken() {
 
 func (p *Parser) isDone() bool {
 	return p.curr.Type == EOF || p.curr.Type == Illegal
+}
+
+func (p *Parser) skipNewline() {
+	for p.curr.Type == Newline {
+		p.nextToken()
+	}
 }
 
 func (p *Parser) unexpectedToken(want string) error {
