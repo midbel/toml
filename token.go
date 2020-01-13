@@ -46,7 +46,7 @@ type Token struct {
 	Pos     Position
 }
 
-func (t Token) IsKey() bool {
+func (t Token) IsIdent() bool {
 	switch t.Type {
 	case Ident, String, Integer:
 		return true

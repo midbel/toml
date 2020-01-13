@@ -13,9 +13,8 @@ func (l *Literal) Pos() Position {
 }
 
 type Option struct {
-	comment Token
-	key     Token
-	value   Node
+	key   Token
+	value Node
 }
 
 func (o *Option) Pos() Position {
@@ -31,15 +30,45 @@ func (a *Array) Pos() Position {
 	return a.pos
 }
 
+type tableType int
+
+const (
+	typeAbstract tableType = iota
+	typeRegular
+	typeInline
+	typeArray
+	typeItem
+)
+
 type Table struct {
-	key   Token
+	pos  Position
+	key  string
+	kind tableType
+
 	nodes []Node
 }
 
-func (t *Table) String() string {
-	return t.key.Literal
+func createTable(key Token, kind tableType) *Table {
+	return createTableWithValues(key, kind, nil)
+}
+
+func createTableWithValues(key Token, kind tableType, ns []Node) *Table {
+	return &Table{
+		pos:   key.Pos,
+		key:   key.Literal,
+		kind:  kind,
+		nodes: ns,
+	}
 }
 
 func (t *Table) Pos() Position {
-	return t.key.Pos
+	return t.pos
+}
+
+func (t *Table) isDefined() bool {
+	return t.kind != typeAbstract
+}
+
+func (t *Table) isFrozen() bool {
+	return false
 }
