@@ -27,7 +27,10 @@ func Parse(r io.Reader) (Node, error) {
 }
 
 func (p *Parser) Parse() (Node, error) {
-	var t Table
+	t := Table{
+		key: Token{Literal: "root"},
+		kind: typeRegular,
+	}
 	if err := p.parseOptions(&t); err != nil {
 		return nil, err
 	}
@@ -40,7 +43,63 @@ func (p *Parser) Parse() (Node, error) {
 }
 
 func (p *Parser) parseTable(t *Table) error {
-	return nil
+	p.nextToken()
+	a, t, err := p.parseHeaders(t)
+	if err != nil {
+		return err
+	}
+	if err = p.parseOptions(a); err == nil {
+		err = t.Append(a)
+	}
+	return err
+}
+
+func (p *Parser) parseHeaders(t *Table) (*Table, *Table, error) {
+	kind := typeRegular
+	if p.curr.Type == lsquare {
+		kind = typeItem
+		p.nextToken()
+	}
+
+	var key Token
+	for p.curr.Type != rsquare {
+		if !p.curr.IsIdent() {
+			return nil, nil, p.unexpectedToken("ident")
+		}
+		key = p.curr
+		p.nextToken()
+		switch p.curr.Type {
+		case dot:
+			p.nextToken()
+			x, err := t.GetOrCreate(key.Literal)
+			if err != nil {
+				return nil, nil, err
+			}
+			t = x
+		case rsquare:
+		default:
+			return nil, nil, p.unexpectedToken("dot/rsquare")
+		}
+	}
+	p.nextToken()
+	if kind == typeItem {
+		if p.curr.Type != rsquare {
+			return nil, nil, p.unexpectedToken("rsquare")
+		}
+		p.nextToken()
+	}
+	if p.curr.Type != Newline {
+		return nil, nil, p.unexpectedToken("newline")
+	} else {
+		p.skipNewline()
+	}
+
+	a := Table{
+		key:  key,
+		kind: kind,
+	}
+
+	return &a, t, nil
 }
 
 func (p *Parser) parseOptions(t *Table) error {
@@ -52,14 +111,14 @@ func (p *Parser) parseOptions(t *Table) error {
 		if err != nil {
 			return err
 		}
+		if err = t.Append(opt); err != nil {
+			return err
+		}
 		p.nextToken()
 		if p.curr.Type != Newline {
 			return p.unexpectedToken("newline")
 		}
-		if err := t.Append(opt); err != nil {
-			return err
-		}
-		p.nextToken()
+		p.skipNewline()
 	}
 	if p.curr.Type != lsquare && !p.isDone() {
 		return p.unexpectedToken("lsquare")
@@ -73,7 +132,7 @@ func (p *Parser) parseOption(dotted bool) (Node, error) {
 	}
 	if p.peek.Type == dot {
 		if dotted {
-
+			p.nextToken()
 		} else {
 			return nil, p.unexpectedToken("equal")
 		}
@@ -116,8 +175,9 @@ func (p *Parser) parseLiteral() (Node, error) {
 func (p *Parser) parseArray() (Node, error) {
 	p.nextToken()
 
-	var a Array
+	a := Array{pos: p.curr.Pos}
 	for !p.isDone() {
+		p.skipNewline()
 		if p.curr.Type == rsquare {
 			break
 		}
@@ -136,7 +196,10 @@ func (p *Parser) parseArray() (Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		a.Append(node)
+
 		p.nextToken()
+		p.skipNewline()
 		if p.curr.Type == rsquare {
 			break
 		}
@@ -144,7 +207,7 @@ func (p *Parser) parseArray() (Node, error) {
 			return nil, p.unexpectedToken("comma")
 		}
 		p.nextToken()
-		_ = node
+		p.skipNewline()
 	}
 	if p.curr.Type != rsquare {
 		return nil, p.unexpectedToken("rsquare")
@@ -155,13 +218,19 @@ func (p *Parser) parseArray() (Node, error) {
 func (p *Parser) parseInline() (Node, error) {
 	p.nextToken()
 
-	var t Table
+	t := Table{
+		key: Token{Pos: p.curr.Pos},
+		kind: typeInline,
+	}
 	for !p.isDone() {
 		if p.curr.Type == rcurly {
 			break
 		}
-		_, err := p.parseOption(false)
+		opt, err := p.parseOption(false)
 		if err != nil {
+			return nil, err
+		}
+		if err = t.Append(opt); err != nil {
 			return nil, err
 		}
 		p.nextToken()

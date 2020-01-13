@@ -48,10 +48,11 @@ func (a *Array) Append(n Node) {
 type tableType int
 
 const (
-	typeAbstract tableType = iota
+	typeAbstract tableType = -(iota + 1)
 	typeRegular
 	typeArray
 	typeItem
+	typeInline
 )
 
 type Table struct {
@@ -66,6 +67,9 @@ func (t *Table) Pos() Position {
 }
 
 func (t *Table) GetOrCreate(str string) (*Table, error) {
+	if t.isInline() {
+		return nil, fmt.Errorf("forbidden")
+	}
 	at := searchNodes(str, t.nodes)
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
@@ -77,7 +81,7 @@ func (t *Table) GetOrCreate(str string) (*Table, error) {
 			if x.key.Literal != str {
 				break
 			}
-			if x.kind == typeRegular {
+			if x.kind == typeRegular || x.kind == typeAbstract {
 				return x, nil
 			}
 			if n := len(x.nodes); x.kind == typeArray && n > 0 {
@@ -85,7 +89,12 @@ func (t *Table) GetOrCreate(str string) (*Table, error) {
 			}
 		}
 	}
-	return nil, nil
+	a := Table{
+		key:  Token{Literal: str},
+		kind: typeAbstract,
+	}
+	t.nodes = appendNode(t.nodes, &a, at)
+	return &a, nil //t.appendTable(&a)
 }
 
 func (t *Table) Append(n Node) error {
@@ -93,9 +102,12 @@ func (t *Table) Append(n Node) error {
 	case *Option:
 		return t.appendOption(n)
 	case *Table:
+		if t.isInline() {
+			return fmt.Errorf("forbidden")
+		}
 		return t.appendTable(n)
 	default:
-		return fmt.Errorf("%T: can not be appended", n)
+		return fmt.Errorf("%T: can not be appended to table %s", n, t.key.Literal)
 	}
 	return nil
 }
@@ -109,11 +121,30 @@ func (t *Table) appendTable(n *Table) error {
 				return fmt.Errorf("%w (%s): option %s", ErrDuplicate, x.Pos(), n.key)
 			}
 		case *Table:
+			if x.kind == typeArray {
+				if n.kind != typeItem {
+					return fmt.Errorf("%s: can not be appended to array", n.key.Literal)
+				}
+				x.nodes = append(x.nodes, n)
+				return nil
+			}
 			if x.key.Literal == n.key.Literal {
-				return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
+				if x.kind != typeAbstract {
+					return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
+				}
 			}
 		default:
 		}
+	}
+	if n.kind == typeItem {
+		n = &Table{
+			key:   n.key,
+			kind:  typeArray,
+			nodes: []Node{n},
+		}
+	}
+	if n.kind == typeAbstract {
+		n.kind = typeRegular
 	}
 	t.nodes = appendNode(t.nodes, n, at)
 	return nil
@@ -138,12 +169,8 @@ func (t *Table) appendOption(n *Option) error {
 	return nil
 }
 
-func (t *Table) isDefined() bool {
-	return t.kind != typeAbstract
-}
-
-func (t *Table) isFrozen() bool {
-	return false
+func (t *Table) isInline() bool {
+	return t.key.Literal == "" || t.kind == typeInline
 }
 
 func searchNodes(str string, nodes []Node) int {
