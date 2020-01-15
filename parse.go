@@ -28,9 +28,11 @@ func Parse(r io.Reader) (Node, error) {
 
 func (p *Parser) Parse() (Node, error) {
 	t := Table{
-		key: Token{Literal: "root"},
+		key:  Token{Literal: "root"},
 		kind: typeRegular,
 	}
+
+	p.skipNewline()
 	if err := p.parseOptions(&t); err != nil {
 		return nil, err
 	}
@@ -107,11 +109,7 @@ func (p *Parser) parseOptions(t *Table) error {
 		if p.curr.Type == lsquare {
 			break
 		}
-		opt, err := p.parseOption(true)
-		if err != nil {
-			return err
-		}
-		if err = t.Append(opt); err != nil {
+		if err := p.parseOption(t, true); err != nil {
 			return err
 		}
 		p.nextToken()
@@ -126,16 +124,23 @@ func (p *Parser) parseOptions(t *Table) error {
 	return nil
 }
 
-func (p *Parser) parseOption(dotted bool) (Node, error) {
+func (p *Parser) parseOption(t *Table, dotted bool) error {
 	if !p.curr.IsIdent() {
-		return nil, p.unexpectedToken("ident")
+		return p.unexpectedToken("ident")
 	}
 	if p.peek.Type == dot {
-		if dotted {
-			p.nextToken()
-		} else {
-			return nil, p.unexpectedToken("equal")
+		if !dotted {
+			return p.unexpectedToken("equal")
 		}
+		x, err := t.GetOrCreate(p.curr.Literal)
+		if err != nil {
+			return err
+		}
+		x.kind = typeRegular
+
+		p.nextToken()
+		p.nextToken()
+		return p.parseOption(x, dotted)
 	}
 	var (
 		opt = Option{key: p.curr}
@@ -143,7 +148,7 @@ func (p *Parser) parseOption(dotted bool) (Node, error) {
 	)
 	p.nextToken()
 	if p.curr.Type != equal {
-		return nil, p.unexpectedToken("equal")
+		return p.unexpectedToken("equal")
 	}
 	p.nextToken()
 	switch p.curr.Type {
@@ -154,10 +159,10 @@ func (p *Parser) parseOption(dotted bool) (Node, error) {
 	default:
 		opt.value, err = p.parseLiteral()
 	}
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = t.Append(&opt)
 	}
-	return &opt, nil
+	return err
 }
 
 func (p *Parser) parseLiteral() (Node, error) {
@@ -219,18 +224,14 @@ func (p *Parser) parseInline() (Node, error) {
 	p.nextToken()
 
 	t := Table{
-		key: Token{Pos: p.curr.Pos},
+		key:  Token{Pos: p.curr.Pos},
 		kind: typeInline,
 	}
 	for !p.isDone() {
 		if p.curr.Type == rcurly {
 			break
 		}
-		opt, err := p.parseOption(false)
-		if err != nil {
-			return nil, err
-		}
-		if err = t.Append(opt); err != nil {
+		if err := p.parseOption(&t, false); err != nil {
 			return nil, err
 		}
 		p.nextToken()
@@ -267,5 +268,5 @@ func (p *Parser) skipNewline() {
 }
 
 func (p *Parser) unexpectedToken(want string) error {
-	return fmt.Errorf("unexpected token %s (want: %s)", p.curr, want)
+	return fmt.Errorf("%s: unexpected token %s (want: %s)", p.curr.Pos, p.curr, want)
 }

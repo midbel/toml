@@ -93,8 +93,9 @@ func (t *Table) GetOrCreate(str string) (*Table, error) {
 		key:  Token{Literal: str},
 		kind: typeAbstract,
 	}
+	// return &a, t.appendTable(&a)
 	t.nodes = appendNode(t.nodes, &a, at)
-	return &a, nil //t.appendTable(&a)
+	return &a, nil
 }
 
 func (t *Table) Append(n Node) error {
@@ -117,7 +118,7 @@ func (t *Table) appendTable(n *Table) error {
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
 		case *Option:
-			if x.key == n.key {
+			if x.key.Literal == n.key.Literal {
 				return fmt.Errorf("%w (%s): option %s", ErrDuplicate, x.Pos(), n.key)
 			}
 		case *Table:
@@ -155,7 +156,7 @@ func (t *Table) appendOption(n *Option) error {
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
 		case *Option:
-			if x.key == n.key {
+			if x.key.Literal == n.key.Literal {
 				return fmt.Errorf("%w (%s): option %s", ErrDuplicate, x.Pos(), n.key)
 			}
 		case *Table:
