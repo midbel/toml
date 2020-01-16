@@ -45,7 +45,7 @@ func (a *Array) Append(n Node) {
 	a.nodes = append(a.nodes, n)
 }
 
-type tableType int
+type tableType int8
 
 const (
 	typeAbstract tableType = -(iota + 1)
@@ -54,6 +54,23 @@ const (
 	typeItem
 	typeInline
 )
+
+func (t tableType) String() string {
+	switch t {
+	case typeAbstract:
+		return "abstract"
+	case typeRegular:
+		return "regular"
+	case typeArray:
+		return "array"
+	case typeItem:
+		return "item"
+	case typeInline:
+		return "inline"
+	default:
+		return "unknown"
+	}
+}
 
 type Table struct {
 	key  Token
@@ -93,7 +110,6 @@ func (t *Table) GetOrCreate(str string) (*Table, error) {
 		key:  Token{Literal: str},
 		kind: typeAbstract,
 	}
-	// return &a, t.appendTable(&a)
 	t.nodes = appendNode(t.nodes, &a, at)
 	return &a, nil
 }
@@ -130,9 +146,11 @@ func (t *Table) appendTable(n *Table) error {
 				return nil
 			}
 			if x.key.Literal == n.key.Literal {
-				if x.kind != typeAbstract {
-					return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
+				if x.kind == typeAbstract {
+					x.nodes, x.kind = append(x.nodes, n.nodes...), typeRegular
+					return nil
 				}
+				return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
 			}
 		default:
 		}
@@ -143,9 +161,6 @@ func (t *Table) appendTable(n *Table) error {
 			kind:  typeArray,
 			nodes: []Node{n},
 		}
-	}
-	if n.kind == typeAbstract {
-		n.kind = typeRegular
 	}
 	t.nodes = appendNode(t.nodes, n, at)
 	return nil

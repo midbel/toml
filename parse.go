@@ -136,7 +136,6 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		if err != nil {
 			return err
 		}
-		x.kind = typeRegular
 
 		p.nextToken()
 		p.nextToken()
