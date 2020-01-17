@@ -46,27 +46,19 @@ func (p *Parser) Parse() (Node, error) {
 
 func (p *Parser) parseTable(t *Table) error {
 	p.nextToken()
-	a, t, err := p.parseHeaders(t)
-	if err != nil {
-		return err
-	}
-	if err = p.parseOptions(a); err == nil {
-		err = t.Append(a)
-	}
-	return err
-}
 
-func (p *Parser) parseHeaders(t *Table) (*Table, *Table, error) {
-	kind := typeRegular
+	var (
+		kind = typeRegular
+		key  Token
+	)
 	if p.curr.Type == lsquare {
 		kind = typeItem
 		p.nextToken()
 	}
 
-	var key Token
 	for p.curr.Type != rsquare {
 		if !p.curr.IsIdent() {
-			return nil, nil, p.unexpectedToken("ident")
+			return p.unexpectedToken("ident")
 		}
 		key = p.curr
 		p.nextToken()
@@ -75,33 +67,36 @@ func (p *Parser) parseHeaders(t *Table) (*Table, *Table, error) {
 			p.nextToken()
 			x, err := t.GetOrCreate(key.Literal)
 			if err != nil {
-				return nil, nil, err
+				return err
 			}
 			t = x
 		case rsquare:
 		default:
-			return nil, nil, p.unexpectedToken("dot/rsquare")
+			return p.unexpectedToken("dot/rsquare")
 		}
 	}
 	p.nextToken()
 	if kind == typeItem {
 		if p.curr.Type != rsquare {
-			return nil, nil, p.unexpectedToken("rsquare")
+			return p.unexpectedToken("rsquare")
 		}
 		p.nextToken()
 	}
 	if p.curr.Type != Newline {
-		return nil, nil, p.unexpectedToken("newline")
+		return p.unexpectedToken("newline")
 	} else {
 		p.skipNewline()
 	}
 
-	a := Table{
+	a := &Table{
 		key:  key,
 		kind: kind,
 	}
-
-	return &a, t, nil
+	err := t.Append(a)
+	if err == nil {
+		err = p.parseOptions(a)
+	}
+	return err
 }
 
 func (p *Parser) parseOptions(t *Table) error {

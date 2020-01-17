@@ -84,37 +84,62 @@ func (t *Table) Pos() Position {
 }
 
 func (t *Table) GetOrCreate(str string) (*Table, error) {
+	x, err := t.Get(str)
+	if err == nil {
+		return x, nil
+	}
+	return t.Create(str)
+}
+
+func (t *Table) Get(str string) (*Table, error) {
+	if t.kind == typeArray {
+		var x *Table
+		if n := len(t.nodes); n > 0 {
+			x = t.nodes[n-1].(*Table)
+		}
+		return x, nil
+	}
+	at := searchNodes(str, t.Nodes)
+	if at < len(t.nodes) {
+		x, ok := t.nodes[at].(*Table)
+		if ok {
+			return x
+		}
+	}
+	return nil, fmt.Errorf("%s: table does not exist", str)
+}
+
+func (t *Table) Create(str string) (*Table, error) {
 	if t.isInline() {
 		return nil, fmt.Errorf("forbidden")
 	}
-	at := searchNodes(str, t.nodes)
+	if t.kind == typeArray {
+		x := &Table{
+			key: Token{Literal: str},
+		}
+		t.nodes = append(t.nodes, x)
+		return x, nil
+	}
+	at := searchNodes(str, t.Nodes)
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
 		case *Option:
 			if x.key.Literal == str {
-				return nil, fmt.Errorf("%w (%s): option %s", ErrExists, x.key.Pos, x.key.Literal)
+				return nil, fmt.Errorf("%s: option already exists", str)
 			}
 		case *Table:
-			if x.key.Literal != str {
-				break
-			}
-			if x.kind == typeRegular || x.kind == typeAbstract {
-				return x, nil
-			}
-			if n := len(x.nodes); x.kind == typeArray && n > 0 {
-				return x.nodes[n-1].(*Table), nil
+			if x.key.Literal == str {
+				return nil, fmt.Errorf("%s: table already exists", str)
 			}
 		}
 	}
-	a := Table{
-		key:  Token{Literal: str},
-		kind: typeAbstract,
-	}
-	t.nodes = appendNode(t.nodes, &a, at)
-	return &a, nil
+	return nil, nil
 }
 
 func (t *Table) Append(n Node) error {
+	if t == nil {
+		return nil
+	}
 	switch n := n.(type) {
 	case *Option:
 		return t.appendOption(n)
@@ -126,43 +151,6 @@ func (t *Table) Append(n Node) error {
 	default:
 		return fmt.Errorf("%T: can not be appended to table %s", n, t.key.Literal)
 	}
-	return nil
-}
-
-func (t *Table) appendTable(n *Table) error {
-	at := searchNodes(n.key.Literal, t.nodes)
-	if at < len(t.nodes) {
-		switch x := t.nodes[at].(type) {
-		case *Option:
-			if x.key.Literal == n.key.Literal {
-				return fmt.Errorf("%w (%s): option %s", ErrDuplicate, x.Pos(), n.key)
-			}
-		case *Table:
-			if x.kind == typeArray {
-				if n.kind != typeItem {
-					return fmt.Errorf("%s: can not be appended to array", n.key.Literal)
-				}
-				x.nodes = append(x.nodes, n)
-				return nil
-			}
-			if x.key.Literal == n.key.Literal {
-				if x.kind == typeAbstract {
-					x.nodes, x.kind = append(x.nodes, n.nodes...), typeRegular
-					return nil
-				}
-				return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
-			}
-		default:
-		}
-	}
-	if n.kind == typeItem {
-		n = &Table{
-			key:   n.key,
-			kind:  typeArray,
-			nodes: []Node{n},
-		}
-	}
-	t.nodes = appendNode(t.nodes, n, at)
 	return nil
 }
 
