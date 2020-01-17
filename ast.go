@@ -1,22 +1,21 @@
 package toml
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 )
 
-var (
-	ErrDuplicate = errors.New("duplicate")
-	ErrExists    = errors.New("exists")
-)
-
 type Node interface {
 	Pos() Position
+	fmt.Stringer
 }
 
 type Literal struct {
 	token Token
+}
+
+func (l *Literal) String() string {
+	return l.token.Literal
 }
 
 func (l *Literal) Pos() Position {
@@ -28,6 +27,10 @@ type Option struct {
 	value Node
 }
 
+func (o *Option) String() string {
+	return o.key.Literal
+}
+
 func (o *Option) Pos() Position {
 	return o.key.Pos
 }
@@ -35,6 +38,10 @@ func (o *Option) Pos() Position {
 type Array struct {
 	pos   Position
 	nodes []Node
+}
+
+func (a *Array) String() string {
+	return "array"
 }
 
 func (a *Array) Pos() Position {
@@ -48,24 +55,24 @@ func (a *Array) Append(n Node) {
 type tableType int8
 
 const (
-	typeAbstract tableType = -(iota + 1)
-	typeRegular
-	typeArray
-	typeItem
-	typeInline
+	tableImplicit tableType = -(iota + 1)
+	tableRegular
+	tableArray
+	tableItem
+	tableInline
 )
 
 func (t tableType) String() string {
 	switch t {
-	case typeAbstract:
-		return "abstract"
-	case typeRegular:
+	case tableImplicit:
+		return "implicit"
+	case tableRegular:
 		return "regular"
-	case typeArray:
+	case tableArray:
 		return "array"
-	case typeItem:
+	case tableItem:
 		return "item"
-	case typeInline:
+	case tableInline:
 		return "inline"
 	default:
 		return "unknown"
@@ -79,115 +86,128 @@ type Table struct {
 	nodes []Node
 }
 
+func (t *Table) String() string {
+	return t.key.Literal
+}
+
 func (t *Table) Pos() Position {
 	return t.key.Pos
 }
 
-func (t *Table) GetOrCreate(str string) (*Table, error) {
-	x, err := t.Get(str)
-	if err == nil {
-		return x, nil
-	}
-	return t.Create(str)
-}
-
-func (t *Table) Get(str string) (*Table, error) {
-	if t.kind == typeArray {
-		var x *Table
-		if n := len(t.nodes); n > 0 {
-			x = t.nodes[n-1].(*Table)
-		}
-		return x, nil
-	}
-	at := searchNodes(str, t.Nodes)
-	if at < len(t.nodes) {
-		x, ok := t.nodes[at].(*Table)
-		if ok {
-			return x
-		}
-	}
-	return nil, fmt.Errorf("%s: table does not exist", str)
-}
-
-func (t *Table) Create(str string) (*Table, error) {
-	if t.isInline() {
-		return nil, fmt.Errorf("forbidden")
-	}
-	if t.kind == typeArray {
-		x := &Table{
-			key: Token{Literal: str},
-		}
-		t.nodes = append(t.nodes, x)
-		return x, nil
-	}
-	at := searchNodes(str, t.Nodes)
+func (t *Table) retrieveTable(tok Token) (*Table, error) {
+	at := searchNodes(tok.Literal, t.nodes)
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
 		case *Option:
-			if x.key.Literal == str {
-				return nil, fmt.Errorf("%s: option already exists", str)
+			if x.key.Literal == tok.Literal {
+				return nil, fmt.Errorf("%s: option", tok.Literal)
 			}
 		case *Table:
-			if x.key.Literal == str {
-				return nil, fmt.Errorf("%s: table already exists", str)
+			if x.key.Literal != tok.Literal {
+				break
 			}
+			if x.isArray() && len(x.nodes) > 0 {
+				return x.nodes[len(x.nodes)-1].(*Table), nil
+			}
+			return x, nil
+		default:
 		}
 	}
-	return nil, nil
+	x := &Table{
+		key:  tok,
+		kind: tableImplicit,
+	}
+	return x, t.registerTable(x)
 }
 
-func (t *Table) Append(n Node) error {
-	if t == nil {
-		return nil
+func (t *Table) registerTable(n *Table) error {
+	if t.isInline() {
+		return fmt.Errorf("can not register table to inline table")
 	}
-	switch n := n.(type) {
-	case *Option:
-		return t.appendOption(n)
-	case *Table:
-		if t.isInline() {
-			return fmt.Errorf("forbidden")
-		}
-		return t.appendTable(n)
-	default:
-		return fmt.Errorf("%T: can not be appended to table %s", n, t.key.Literal)
-	}
-	return nil
-}
 
-func (t *Table) appendOption(n *Option) error {
 	at := searchNodes(n.key.Literal, t.nodes)
 	if at < len(t.nodes) {
 		switch x := t.nodes[at].(type) {
 		case *Option:
 			if x.key.Literal == n.key.Literal {
-				return fmt.Errorf("%w (%s): option %s", ErrDuplicate, x.Pos(), n.key)
+				return fmt.Errorf("%s: option already exists", n.key.Literal)
 			}
 		case *Table:
-			if x.key.Literal == n.key.Literal {
-				return fmt.Errorf("%w (%s): table %s", ErrDuplicate, x.Pos(), n.key)
+			if x.key.Literal != n.key.Literal {
+				break
 			}
+			if x.isImplicit() {
+				t.nodes[at] = mergeTables(n, x)
+				return nil
+			}
+			if x.isArray() {
+				if n.kind != tableItem {
+					return fmt.Errorf("%s: invalid table type (%s)", x.key.Literal, n.kind)
+				}
+				x.nodes = append(x.nodes, n)
+				return nil
+			}
+			return fmt.Errorf("%s: table already exists", n.key.Literal)
 		default:
+		}
+	}
+	if n.kind == tableItem {
+		n = &Table{
+			key:   n.key,
+			kind:  tableArray,
+			nodes: []Node{n},
 		}
 	}
 	t.nodes = appendNode(t.nodes, n, at)
 	return nil
 }
 
+func (t *Table) registerOption(o *Option) error {
+	at := searchNodes(o.key.Literal, t.nodes)
+	if at < len(t.nodes) {
+		switch x := t.nodes[at].(type) {
+		case *Option:
+			if x.key.Literal == o.key.Literal {
+				return fmt.Errorf("%s: option already exists", x.key.Literal)
+			}
+		case *Table:
+			if x.key.Literal == o.key.Literal {
+				return fmt.Errorf("%s: table already exists", x.key.Literal)
+			}
+		default:
+		}
+	}
+	t.nodes = appendNode(t.nodes, o, at)
+	if t.isImplicit() {
+		t.kind = tableRegular
+	}
+	return nil
+}
+
+func (t *Table) isArray() bool {
+	return t.kind == tableArray
+}
+
 func (t *Table) isInline() bool {
-	return t.key.Literal == "" || t.kind == typeInline
+	return t.key.Literal == "" && t.kind == tableInline
+}
+
+func (t *Table) isImplicit() bool {
+	return t.kind == tableImplicit
+}
+
+func mergeTables(t, n *Table) *Table {
+	t.nodes = append(t.nodes, n.nodes...)
+	t.kind = tableRegular
+	sort.Slice(t.nodes, func(i, j int) bool {
+		return t.nodes[i].String() <= t.nodes[j].String()
+	})
+	return t
 }
 
 func searchNodes(str string, nodes []Node) int {
 	return sort.Search(len(nodes), func(i int) bool {
-		var lit string
-		switch n := nodes[i].(type) {
-		case *Option:
-			lit = n.key.Literal
-		case *Table:
-			lit = n.key.Literal
-		default:
-		}
-		return str <= lit
+		return str <= nodes[i].String()
 	})
 }
 

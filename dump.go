@@ -17,7 +17,7 @@ func dumpNode(n Node, level int) {
 		fmt.Printf("%soption(pos: %s, key: %s, value: %s),", strings.Repeat(" ", level*2), x.Pos(), x.key.Literal, value)
 		fmt.Println()
 	case *Table:
-		if x.kind == typeArray {
+		if x.kind == tableArray {
 			fmt.Printf("%sarray{", strings.Repeat(" ", level*2))
 			fmt.Println()
 			for _, n := range sortNodes(x.nodes) {

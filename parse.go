@@ -28,8 +28,8 @@ func Parse(r io.Reader) (Node, error) {
 
 func (p *Parser) Parse() (Node, error) {
 	t := Table{
-		key:  Token{Literal: "root"},
-		kind: typeRegular,
+		key:  Token{Literal: "default"},
+		kind: tableRegular,
 	}
 
 	p.skipNewline()
@@ -37,46 +37,51 @@ func (p *Parser) Parse() (Node, error) {
 		return nil, err
 	}
 	for !p.isDone() {
-		if err := p.parseTable(&t); err != nil {
+		if p.curr.Type != lsquare {
+			return nil, p.unexpectedToken("lsquare")
+		}
+		p.nextToken()
+		kind := tableRegular
+		if p.curr.Type == lsquare {
+			kind = tableItem
+			p.nextToken()
+		}
+		if err := p.parseTable(&t, kind); err != nil {
 			return nil, err
 		}
 	}
 	return &t, nil
 }
 
-func (p *Parser) parseTable(t *Table) error {
-	p.nextToken()
-
-	var (
-		kind = typeRegular
-		key  Token
-	)
-	if p.curr.Type == lsquare {
-		kind = typeItem
-		p.nextToken()
-	}
-
+func (p *Parser) parseTable(t *Table, kind tableType) error {
 	for p.curr.Type != rsquare {
 		if !p.curr.IsIdent() {
 			return p.unexpectedToken("ident")
 		}
-		key = p.curr
-		p.nextToken()
-		switch p.curr.Type {
+		switch p.peek.Type {
 		case dot:
-			p.nextToken()
-			x, err := t.GetOrCreate(key.Literal)
+			x, err := t.retrieveTable(p.curr)
 			if err != nil {
 				return err
 			}
 			t = x
+			p.nextToken()
 		case rsquare:
+			x := &Table{
+				key:  p.curr,
+				kind: kind,
+			}
+			if err := t.registerTable(x); err != nil {
+				return err
+			}
+			t = x
 		default:
-			return p.unexpectedToken("dot/rsquare")
+			return p.unexpectedToken("rsquare/dot")
 		}
+		p.nextToken()
 	}
 	p.nextToken()
-	if kind == typeItem {
+	if t.kind == tableItem {
 		if p.curr.Type != rsquare {
 			return p.unexpectedToken("rsquare")
 		}
@@ -84,19 +89,9 @@ func (p *Parser) parseTable(t *Table) error {
 	}
 	if p.curr.Type != Newline {
 		return p.unexpectedToken("newline")
-	} else {
-		p.skipNewline()
 	}
-
-	a := &Table{
-		key:  key,
-		kind: kind,
-	}
-	err := t.Append(a)
-	if err == nil {
-		err = p.parseOptions(a)
-	}
-	return err
+	p.skipNewline()
+	return p.parseOptions(t)
 }
 
 func (p *Parser) parseOptions(t *Table) error {
@@ -125,13 +120,12 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 	}
 	if p.peek.Type == dot {
 		if !dotted {
-			return p.unexpectedToken("equal")
+			return fmt.Errorf("dot not allow")
 		}
-		x, err := t.GetOrCreate(p.curr.Literal)
+		x, err := t.retrieveTable(p.curr)
 		if err != nil {
 			return err
 		}
-
 		p.nextToken()
 		p.nextToken()
 		return p.parseOption(x, dotted)
@@ -154,7 +148,7 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		opt.value, err = p.parseLiteral()
 	}
 	if err == nil {
-		err = t.Append(&opt)
+		err = t.registerOption(&opt)
 	}
 	return err
 }
@@ -219,7 +213,7 @@ func (p *Parser) parseInline() (Node, error) {
 
 	t := Table{
 		key:  Token{Pos: p.curr.Pos},
-		kind: typeInline,
+		kind: tableInline,
 	}
 	for !p.isDone() {
 		if p.curr.Type == rcurly {
