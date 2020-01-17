@@ -234,18 +234,18 @@ func (s *Scanner) scanNumber(t *Token) {
 	)
 	if signed && sign == minus {
 		pos -= utf8.RuneLen(sign)
-		offset++
+		offset += utf8.RuneLen(sign)
 	}
 Loop:
 	for {
 		switch {
 		case isDigit(s.char):
 			prev = s.char
-			offset++
+			offset += utf8.RuneLen(s.char)
 		case s.char == underscore:
 			if !(isDigit(prev) && isDigit(s.peekRune())) {
 				t.Type = Illegal
-			} else {
+				return
 			}
 			offset++
 		case s.char == dot:
@@ -268,7 +268,7 @@ Loop:
 		}
 	}
 	switch {
-	case t.IsNumber() && zero && (isDigit(s.char) && s.char != '0'):
+	case t.Type == Integer && zero && offset > 1 && !signed:
 		t.Type = Illegal
 	case t.IsTime() && signed:
 		t.Type = Illegal
