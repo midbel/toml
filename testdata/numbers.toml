@@ -10,9 +10,9 @@ zero5 = +0.0
 zero6 = -0.0
 
 hexapos  = 0xdeadbeef
-hexaneg  = -0xdeadbeef
+# hexaneg  = -0xdeadbeef
 octalpos = 0o01234567
-octalneg = -0o01234567
+# octalneg = -0o01234567
 binary   = 0b0000001
 
 float1 = 3.14159265

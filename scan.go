@@ -221,7 +221,7 @@ func (s *Scanner) scanNumber(t *Token) {
 	pos, zero = s.pos, s.char == '0'
 	if accept := acceptBase(s.peekRune()); zero && accept != nil {
 		s.readRune()
-		if signed && sign == plus {
+		if signed {
 			t.Type = Illegal
 		} else {
 			s.scanIntegerWith(t, pos, accept)
