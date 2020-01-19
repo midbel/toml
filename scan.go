@@ -363,12 +363,12 @@ func (s *Scanner) scanExponent(t *Token) int {
 
 	s.readRune() // consume the 'e' or the 'E'
 	var (
-		offset = 1
+		offset = utf8.RuneLen('e')
 		prev   = s.char
 	)
 	if isSign(s.char) {
 		s.readRune()
-		offset++
+		offset += utf8.RuneLen(s.char)
 	}
 	for {
 		if !isDigit(s.char) && s.char != underscore {
@@ -381,7 +381,7 @@ func (s *Scanner) scanExponent(t *Token) int {
 				return offset
 			}
 		}
-		offset++
+		offset += utf8.RuneLen(s.char)
 		prev = s.char
 		s.readRune()
 		if s.isNewline() || isBlank(s.char) || s.char == EOF || isPunct(s.char) {
@@ -404,7 +404,7 @@ Loop:
 		switch {
 		case isDigit(s.char):
 			prev = s.char
-			offset++
+			offset += utf8.RuneLen(s.char)
 		case s.char == underscore:
 			if !(isDigit(s.peekRune()) || isDigit(prev)) {
 				t.Type = Illegal
@@ -449,7 +449,7 @@ func (s *Scanner) scanIntegerWith(t *Token, pos int, accept func(rune) bool) {
 			}
 		}
 		s.readRune()
-		offset++
+		offset += utf8.RuneLen(s.char)
 	}
 	t.Literal = string(s.buffer[pos : pos+offset])
 }
@@ -466,7 +466,7 @@ func (s *Scanner) scanComment(t *Token) {
 	)
 	for !s.isNewline() {
 		s.readRune()
-		offset++
+		offset += utf8.RuneLen(s.char)
 	}
 	s.unreadRune()
 	t.Literal = string(s.buffer[pos : pos+offset])
@@ -534,7 +534,7 @@ func (s *Scanner) scanIdent(t *Token) {
 	)
 	for isIdent(s.char) {
 		s.readRune()
-		offset++
+		offset += utf8.RuneLen(s.char)
 	}
 	t.Literal = string(s.buffer[pos : pos+offset])
 	switch t.Literal {
@@ -557,7 +557,7 @@ func (s *Scanner) skipWith(is func(rune) bool) int {
 	var i int
 	for is(s.char) {
 		s.readRune()
-		i++
+		i += utf8.RuneLen(s.char)
 	}
 	return i
 }
@@ -580,7 +580,7 @@ func acceptBase(r rune) func(rune) bool {
 }
 
 func isHexa(r rune) bool {
-	return isDigit(r) || r == underscore || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
+	return isDigit(r) || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f') || r == underscore
 }
 
 func isOctal(r rune) bool {
@@ -588,7 +588,7 @@ func isOctal(r rune) bool {
 }
 
 func isBinary(r rune) bool {
-	return r == '0' || r == '1'
+	return r == '0' || r == '1' || r == underscore
 }
 
 func isPunct(r rune) bool {
