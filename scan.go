@@ -109,6 +109,10 @@ func (s *Scanner) Scan() Token {
 	case isLetter(s.char) || (s.mode == scanKey && isDigit(s.char)):
 		s.scanIdent(&t)
 	case (s.mode == scanValue && isDigit(s.char)) || isSign(s.char):
+		if accept := acceptBase(s.peekRune()); s.char == '0' && accept != nil {
+			s.scanNumberWith(&t, accept)
+			break
+		}
 		s.scanNumber(&t)
 	case isQuote(s.char):
 		s.scanString(&t)
@@ -211,8 +215,7 @@ func (s *Scanner) scanNumber(t *Token) {
 		signed = isSign(s.char)
 		sign   = s.char
 		pos    = s.pos
-		zero   = s.char == '0'
-		offset int
+		// zero   = s.char == '0'
 	)
 	if signed {
 		s.readRune()
@@ -220,59 +223,40 @@ func (s *Scanner) scanNumber(t *Token) {
 			pos = s.pos
 		}
 	}
-	if accept := acceptBase(s.peekRune()); zero && accept != nil {
-		s.readRune()
-		if signed {
-			t.Type = Illegal
-		} else {
-			s.scanIntegerWith(t, pos, accept)
-		}
-		return
-	}
 
-	if signed && sign == minus {
-		offset += utf8.RuneLen(sign)
+	eol := func() bool {
+		return isDelim(s.char) || isWhitespace(s.char) || s.char == EOF
 	}
-
-	prev := s.char
-Loop:
-	for {
+	for prev := s.char; !(t.Type == Illegal || eol()); {
 		switch {
 		case isDigit(s.char):
 			prev = s.char
-			offset += utf8.RuneLen(s.char)
 		case s.char == underscore:
 			if !(isDigit(prev) && isDigit(s.peekRune())) {
 				t.Type = Illegal
-				return
 			}
-			offset += utf8.RuneLen(s.char)
 		case s.char == dot:
-			offset += s.scanFraction(t)
+			s.scanFraction(t)
 		case s.char == 'e' || s.char == 'E':
-			offset += s.scanExponent(t)
+			s.scanExponent(t)
 		case s.char == minus:
-			offset += s.scanDate(t)
+			s.scanDate(t)
+			if signed {
+				t.Type = Illegal
+			}
 		case s.char == colon:
-			offset += s.scanTime(t)
-		case isPunct(s.char) || isWhitespace(s.char) || s.char == EOF:
-			s.unreadRune()
-			break Loop
+			s.scanTime(t)
+			if signed {
+				t.Type = Illegal
+			}
 		default:
 			t.Type = Illegal
 		}
 		s.readRune()
-		if t.Type == Illegal {
-			break
-		}
 	}
-	switch {
-	case t.Type == Integer && zero && offset > 1 && !signed:
-		t.Type = Illegal
-	case t.IsTime() && signed:
-		t.Type = Illegal
-	}
-	t.Literal = string(s.buffer[pos:s.pos])
+
+	s.unreadRune()
+	t.Literal = string(s.buffer[pos : s.pos+1])
 }
 
 func (s *Scanner) scanDate(t *Token) int {
@@ -423,34 +407,26 @@ Loop:
 	return offset
 }
 
-func (s *Scanner) scanIntegerWith(t *Token, pos int, accept func(rune) bool) {
+func (s *Scanner) scanNumberWith(t *Token, accept func(rune) bool) {
+	pos := s.pos
+
+	s.readRune()
 	s.readRune()
 
-	var (
-		prev   = s.char
-		offset = s.pos - pos
-	)
-	if s.char == underscore {
-		t.Type = Illegal
+	eol := func() bool {
+		return isDelim(s.char) || isWhitespace(s.char) || s.char == EOF
 	}
-	for {
-		if isPunct(s.char) || isWhitespace(s.char) || s.char == EOF {
-			s.unreadRune()
-			break
-		}
-		if accept != nil && !accept(s.char) {
+	for prev := s.char; !(t.Type == Illegal || eol()); {
+		if s.char == underscore && !(accept(prev) && accept(s.peekRune())) {
 			t.Type = Illegal
 		}
-		if s.char == underscore {
-			if !(accept(prev) && accept(s.peekRune())) {
-				t.Type = Illegal
-				break
-			}
-		}
+		prev = s.char
 		s.readRune()
-		offset += utf8.RuneLen(s.char)
 	}
-	t.Literal = string(s.buffer[pos : pos+offset])
+	s.unreadRune()
+
+	t.Type = Integer
+	t.Literal = string(s.buffer[pos : s.pos+1])
 }
 
 func (s *Scanner) scanComment(t *Token) {
@@ -584,6 +560,10 @@ func isOctal(r rune) bool {
 
 func isBinary(r rune) bool {
 	return r == '0' || r == '1' || r == underscore
+}
+
+func isDelim(r rune) bool {
+	return r == rsquare || r == rcurly || r == comma
 }
 
 func isPunct(r rune) bool {
