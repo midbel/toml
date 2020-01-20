@@ -113,7 +113,7 @@ func (s *Scanner) Scan() Token {
 			s.scanNumberWith(&t, accept)
 			break
 		}
-		s.scanNumber(&t)
+		s.scanNumber(&t, isSign(s.char))
 	case isQuote(s.char):
 		s.scanString(&t)
 	case isPunct(s.char):
@@ -208,25 +208,36 @@ func (s *Scanner) peekRune() rune {
 	return r
 }
 
-func (s *Scanner) scanNumber(t *Token) {
+func (s *Scanner) scanNumber(t *Token, signed bool) {
 	t.Type = Integer
 
+	eol := func() bool {
+		return isDelim(s.char) || isWhitespace(s.char) || s.char == EOF
+	}
 	var (
-		signed = isSign(s.char)
-		sign   = s.char
 		pos    = s.pos
-		// zero   = s.char == '0'
+		zeros  int
 	)
-	if signed {
+	if sign := s.char; signed {
 		s.readRune()
 		if sign == plus {
 			pos = s.pos
 		}
 	}
-
-	eol := func() bool {
-		return isDelim(s.char) || isWhitespace(s.char) || s.char == EOF
+	for s.char == '0' {
+		zeros++
+		s.readRune()
 	}
+
+	if eol() {
+		s.unreadRune()
+		if zeros > 1 {
+			t.Type = Illegal
+		}
+		t.Literal = string(s.buffer[pos : s.pos+1])
+		return
+	}
+
 	for prev := s.char; !(t.Type == Illegal || eol()); {
 		switch {
 		case isDigit(s.char):
@@ -253,6 +264,10 @@ func (s *Scanner) scanNumber(t *Token) {
 			t.Type = Illegal
 		}
 		s.readRune()
+	}
+
+	if (t.Type == Integer && zeros > 0) || (t.Type == Float && zeros > 1) {
+		t.Type = Illegal
 	}
 
 	s.unreadRune()
