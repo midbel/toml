@@ -77,9 +77,7 @@ func Scan(r io.Reader) (*Scanner, error) {
 		mode:          scanKey,
 	}
 	s.readRune()
-	for s.isNewline() {
-		s.readRune()
-	}
+	s.skipWith(isNewline)
 
 	return &s, nil
 }
@@ -116,7 +114,7 @@ func (s *Scanner) Scan() Token {
 		s.scanString(&t)
 	case isPunct(s.char):
 		t.Type = s.char
-	case s.isNewline():
+	case isNewline(s.char):
 		t.Type = Newline
 		if peek := s.peekRune(); !s.KeepMultiline && peek == newline {
 			s.readRune()
@@ -130,7 +128,7 @@ func (s *Scanner) Scan() Token {
 }
 
 func (s *Scanner) switchMode() {
-	if s.isNewline() && s.mode == scanValue && s.stack == 0 {
+	if isNewline(s.char) && s.mode == scanValue && s.stack == 0 {
 		s.mode = scanKey
 		return
 	}
@@ -212,13 +210,16 @@ func (s *Scanner) scanNumber(t *Token) {
 	var (
 		signed = isSign(s.char)
 		sign   = s.char
-		pos    int
-		zero   bool
+		pos    = s.pos
+		zero   = s.char == '0'
+		offset int
 	)
 	if signed {
 		s.readRune()
+		if sign == plus {
+			pos = s.pos
+		}
 	}
-	pos, zero = s.pos, s.char == '0'
 	if accept := acceptBase(s.peekRune()); zero && accept != nil {
 		s.readRune()
 		if signed {
@@ -228,14 +229,12 @@ func (s *Scanner) scanNumber(t *Token) {
 		}
 		return
 	}
-	var (
-		prev   = s.char
-		offset int
-	)
+
 	if signed && sign == minus {
-		pos -= utf8.RuneLen(sign)
 		offset += utf8.RuneLen(sign)
 	}
+
+	prev := s.char
 Loop:
 	for {
 		switch {
@@ -247,7 +246,7 @@ Loop:
 				t.Type = Illegal
 				return
 			}
-			offset++
+			offset += utf8.RuneLen(s.char)
 		case s.char == dot:
 			offset += s.scanFraction(t)
 		case s.char == 'e' || s.char == 'E':
@@ -256,7 +255,7 @@ Loop:
 			offset += s.scanDate(t)
 		case s.char == colon:
 			offset += s.scanTime(t)
-		case isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF:
+		case isPunct(s.char) || isWhitespace(s.char) || s.char == EOF:
 			s.unreadRune()
 			break Loop
 		default:
@@ -273,7 +272,7 @@ Loop:
 	case t.IsTime() && signed:
 		t.Type = Illegal
 	}
-	t.Literal = string(s.buffer[pos : pos+offset])
+	t.Literal = string(s.buffer[pos:s.pos])
 }
 
 func (s *Scanner) scanDate(t *Token) int {
@@ -299,7 +298,7 @@ func (s *Scanner) scanDate(t *Token) int {
 		if t.Type != Illegal {
 			t.Type = DateTime
 		}
-	case s.isNewline() || isPunct(s.char) || s.char == EOF:
+	case isNewline(s.char) || isPunct(s.char) || s.char == EOF:
 		s.unreadRune()
 		t.Type = Date
 	default:
@@ -327,7 +326,7 @@ func (s *Scanner) scanTime(t *Token) int {
 	if offset += s.readRuneN(3); s.char == dot {
 		offset += s.scanMillis(t)
 	}
-	if s.isNewline() || isPunct(s.char) || s.char == EOF {
+	if isNewline(s.char) || isPunct(s.char) || s.char == EOF {
 		s.unreadRune()
 	}
 	return offset
@@ -384,7 +383,7 @@ func (s *Scanner) scanExponent(t *Token) int {
 		offset += utf8.RuneLen(s.char)
 		prev = s.char
 		s.readRune()
-		if s.isNewline() || isBlank(s.char) || s.char == EOF || isPunct(s.char) {
+		if isWhitespace(s.char) || s.char == EOF || isPunct(s.char) {
 			s.unreadRune()
 			break
 		}
@@ -413,7 +412,7 @@ Loop:
 			offset++
 		case s.char == 'e' || s.char == 'E':
 			offset += s.scanExponent(t)
-		case isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF:
+		case isPunct(s.char) || isWhitespace(s.char) || s.char == EOF:
 			s.unreadRune()
 			break Loop
 		default:
@@ -435,7 +434,7 @@ func (s *Scanner) scanIntegerWith(t *Token, pos int, accept func(rune) bool) {
 		t.Type = Illegal
 	}
 	for {
-		if isPunct(s.char) || isBlank(s.char) || s.isNewline() || s.char == EOF {
+		if isPunct(s.char) || isWhitespace(s.char) || s.char == EOF {
 			s.unreadRune()
 			break
 		}
@@ -464,7 +463,7 @@ func (s *Scanner) scanComment(t *Token) {
 		pos    = s.pos
 		offset int
 	)
-	for !s.isNewline() {
+	for !isNewline(s.char) {
 		s.readRune()
 		offset += utf8.RuneLen(s.char)
 	}
@@ -489,7 +488,7 @@ func (s *Scanner) scanString(t *Token) {
 		}
 		if multi = s.char == quote; multi {
 			s.readRune()
-			if s.isNewline() {
+			if isNewline(s.char) {
 				s.readRune()
 			}
 		}
@@ -497,7 +496,7 @@ func (s *Scanner) scanString(t *Token) {
 	for s.char != quote {
 		if quote == '"' && s.char == backslash {
 			s.readRune()
-			if s.isNewline() {
+			if isNewline(s.char) {
 				s.skipWith(isWhitespace)
 				continue
 			}
@@ -547,10 +546,6 @@ func (s *Scanner) scanIdent(t *Token) {
 		t.Type = Ident
 	}
 	s.unreadRune()
-}
-
-func (s *Scanner) isNewline() bool {
-	return s.char == newline
 }
 
 func (s *Scanner) skipWith(is func(rune) bool) int {
@@ -627,6 +622,10 @@ func isBlank(r rune) bool {
 	return r == space || r == tab
 }
 
+func isNewline(r rune) bool {
+	return r == newline
+}
+
 func isWhitespace(r rune) bool {
-	return isBlank(r) || r == newline
+	return isBlank(r) || isNewline(r)
 }
