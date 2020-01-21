@@ -208,6 +208,14 @@ func (s *Scanner) peekRune() rune {
 	return r
 }
 
+func (s *Scanner) prevRune() rune {
+	r, _ := utf8.DecodeLastRune(s.buffer[:s.pos])
+	if r == utf8.RuneError {
+		r = EOF
+	}
+	return r
+}
+
 func (s *Scanner) scanNumber(t *Token, signed bool) {
 	t.Type = Integer
 
@@ -238,12 +246,11 @@ func (s *Scanner) scanNumber(t *Token, signed bool) {
 		return
 	}
 
-	for prev := s.char; !(t.Type == Illegal || eol()); {
+	for !(t.Type == Illegal || eol()) {
 		switch {
 		case isDigit(s.char):
-			prev = s.char
 		case s.char == underscore:
-			if !(isDigit(prev) && isDigit(s.peekRune())) {
+			if !(isDigit(s.prevRune()) && isDigit(s.peekRune())) {
 				t.Type = Illegal
 			}
 		case s.char == dot:
@@ -297,7 +304,7 @@ func (s *Scanner) scanDate(t *Token) int {
 		if t.Type != Illegal {
 			t.Type = DateTime
 		}
-	case isNewline(s.char) || isPunct(s.char) || s.char == EOF:
+	case isNewline(s.char) || isDelim(s.char) || s.char == EOF:
 		s.unreadRune()
 		t.Type = Date
 	default:
@@ -325,7 +332,7 @@ func (s *Scanner) scanTime(t *Token) int {
 	if offset += s.readRuneN(3); s.char == dot {
 		offset += s.scanMillis(t)
 	}
-	if isNewline(s.char) || isPunct(s.char) || s.char == EOF {
+	if isNewline(s.char) || isDelim(s.char) || s.char == EOF {
 		s.unreadRune()
 	}
 	return offset
@@ -359,11 +366,9 @@ func (s *Scanner) scanTimezone(t *Token) int {
 func (s *Scanner) scanExponent(t *Token) int {
 	t.Type = Float
 
-	s.readRune() // consume the 'e' or the 'E'
-	var (
-		offset = utf8.RuneLen('e')
-		prev   = s.char
-	)
+	s.readRune()
+	offset := utf8.RuneLen('e')
+
 	if isSign(s.char) {
 		s.readRune()
 		offset += utf8.RuneLen(s.char)
@@ -373,16 +378,13 @@ func (s *Scanner) scanExponent(t *Token) int {
 			t.Type = Illegal
 			return offset
 		}
-		if s.char == underscore {
-			if !(isDigit(prev) || isDigit(s.peekRune())) {
-				t.Type = Illegal
-				return offset
-			}
+		if s.char == underscore && !(isDigit(s.prevRune()) || isDigit(s.peekRune())) {
+			t.Type = Illegal
+			return offset
 		}
 		offset += utf8.RuneLen(s.char)
-		prev = s.char
 		s.readRune()
-		if isWhitespace(s.char) || s.char == EOF || isPunct(s.char) {
+		if isWhitespace(s.char) || isDelim(s.char) || s.char == EOF {
 			s.unreadRune()
 			break
 		}
@@ -392,26 +394,23 @@ func (s *Scanner) scanExponent(t *Token) int {
 
 func (s *Scanner) scanFraction(t *Token) int {
 	t.Type = Float
-	var (
-		prev   = s.char
-		offset = 1
-	)
+
+	offset := 1
 	s.readRune() // consume the dot
 Loop:
 	for {
 		switch {
 		case isDigit(s.char):
-			prev = s.char
 			offset += utf8.RuneLen(s.char)
 		case s.char == underscore:
-			if !(isDigit(s.peekRune()) || isDigit(prev)) {
+			if !(isDigit(s.peekRune()) || isDigit(s.prevRune())) {
 				t.Type = Illegal
 				break Loop
 			}
 			offset++
 		case s.char == 'e' || s.char == 'E':
 			offset += s.scanExponent(t)
-		case isPunct(s.char) || isWhitespace(s.char) || s.char == EOF:
+		case isDelim(s.char) || isWhitespace(s.char) || s.char == EOF:
 			s.unreadRune()
 			break Loop
 		default:
@@ -431,11 +430,10 @@ func (s *Scanner) scanNumberWith(t *Token, accept func(rune) bool) {
 	eol := func() bool {
 		return isDelim(s.char) || isWhitespace(s.char) || s.char == EOF
 	}
-	for prev := s.char; !(t.Type == Illegal || eol()); {
-		if s.char == underscore && !(accept(prev) && accept(s.peekRune())) {
+	for !(t.Type == Illegal || eol()) {
+		if s.char == underscore && !(accept(s.prevRune()) && accept(s.peekRune())) {
 			t.Type = Illegal
 		}
-		prev = s.char
 		s.readRune()
 	}
 	s.unreadRune()
