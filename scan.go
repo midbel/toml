@@ -217,8 +217,6 @@ func (s *Scanner) prevRune() rune {
 }
 
 func (s *Scanner) scanNumber(t *Token, signed bool) {
-	t.Type = Integer
-
 	var (
 		pos   = s.pos
 		zeros int
@@ -238,11 +236,25 @@ func (s *Scanner) scanNumber(t *Token, signed bool) {
 		s.unreadRune()
 		if zeros > 1 {
 			t.Type = Illegal
+		} else {
+			t.Type = Integer
 		}
 		t.Literal = string(s.buffer[pos : s.pos+1])
 		return
 	}
 
+	s.scanIntegerOrDate(t, signed)
+
+	if (t.Type == Integer && zeros > 0) || (t.Type == Float && zeros > 1) {
+		t.Type = Illegal
+	}
+
+	s.unreadRune()
+	t.Literal = string(s.buffer[pos : s.pos+1])
+}
+
+func (s *Scanner) scanIntegerOrDate(t *Token, signed bool) {
+	t.Type = Integer
 	for t.Type != Illegal && !endOfNumber(s.char) {
 		switch {
 		case isDigit(s.char):
@@ -269,13 +281,6 @@ func (s *Scanner) scanNumber(t *Token, signed bool) {
 		}
 		s.readRune()
 	}
-
-	if (t.Type == Integer && zeros > 0) || (t.Type == Float && zeros > 1) {
-		t.Type = Illegal
-	}
-
-	s.unreadRune()
-	t.Literal = string(s.buffer[pos : s.pos+1])
 }
 
 func (s *Scanner) scanDate(t *Token) {
