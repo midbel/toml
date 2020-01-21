@@ -470,10 +470,6 @@ func (s *Scanner) scanString(t *Token) {
 				s.char = char
 			}
 		}
-		if !utf8.ValidRune(s.char) {
-			t.Type = Illegal
-			return
-		}
 		buf.WriteRune(s.char)
 		s.readRune()
 	}
@@ -484,7 +480,6 @@ func (s *Scanner) scanString(t *Token) {
 	}
 	if s.char != quote {
 		t.Type = Illegal
-		return
 	}
 }
 
@@ -558,7 +553,7 @@ func isDelim(r rune) bool {
 }
 
 func isPunct(r rune) bool {
-	return r == equal || r == dot || r == lsquare || r == rsquare || r == rcurly || r == lcurly || r == comma
+	return r == equal || r == dot || r == lsquare || r == lcurly || isDelim(r)
 }
 
 func isIdent(r rune) bool {
