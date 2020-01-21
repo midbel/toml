@@ -90,10 +90,7 @@ func (s *Scanner) Scan() Token {
 	}
 	s.skipBlank()
 
-	pos := Position{
-		Line:   s.line,
-		Column: s.column,
-	}
+	pos := s.Pos()
 	s.switchMode()
 	switch {
 	default:
@@ -129,6 +126,13 @@ func (s *Scanner) Scan() Token {
 
 	t.Pos = pos
 	return t
+}
+
+func (s *Scanner) Pos() Position {
+	return Position{
+		Line:   s.line,
+		Column: s.column,
+	}
 }
 
 func (s *Scanner) switchMode() {

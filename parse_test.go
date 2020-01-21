@@ -39,6 +39,7 @@ func TestParse(t *testing.T) {
 		"fruits2.bad",
 		"example",
 		"zeros.bad",
+		"unicode-hard",
 	}
 	for _, f := range files {
 		file := f + ".toml"
