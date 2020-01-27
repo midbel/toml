@@ -42,6 +42,20 @@ func DecodeFile(file string, v interface{}) error {
 }
 
 func decodeTable(t *Table, e reflect.Value) error {
+	var err error
+	for _, n := range t.nodes {
+		switch n := n.(type) {
+		case *Option:
+			err = decodeOption(n, e)
+		case *Table:
+			err = decodeTable(n, e)
+		default:
+			err = fmt.Errorf("table: unexpected node type %T", n)
+		}
+		if err != nil {
+			break
+		}
+	}
 	return nil
 }
 
@@ -49,6 +63,28 @@ func decodeMap(t *Table, e reflect.Value) error {
 	return nil
 }
 
-func decodeArray(t *Table, e reflect.Value) error {
+func decodeArray(a *Array, e reflect.Value) error {
+	if k := e.Kind(); k != reflect.Array || k != reflect.Slice {
+		return fmt.Errorf("array: expected array/slice, got %s", k)
+	}
+	return nil
+}
+
+func decodeOption(o *Option, e reflect.Value) error {
+	var err error
+	switch n := o.value.(type) {
+	case *Array:
+		err = decodeArray(n, e)
+	case *Table:
+		err = decodeTable(n, e)
+	case *Literal:
+		err = decodeLiteral(n, e)
+	default:
+		err = fmt.Errorf("option: unexpected node type %T", n)
+	}
+	return err
+}
+
+func decodeLiteral(i *Literal, e reflect.Value) error {
 	return nil
 }
