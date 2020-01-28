@@ -1,7 +1,7 @@
 package toml
 
 import (
-	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,6 +45,35 @@ type Package struct {
 func TestDecode(t *testing.T) {
 	t.Run("values", testDecodeValues)
 	t.Run("pointers", testDecodePointers)
+	t.Run("interface", testDecodeInterface)
+	t.Run("map", testDecodeMap)
+	t.Run("mix", testDecodeMix)
+}
+
+func testDecodeMix(t *testing.T) {
+	const sample = `
+nested = [[1, 2, 3], [3.14, 15.6, 0.18]]
+inline = [
+	{label="french", code="fr", enabled=false, translations=["français", "frans"]},
+	{label="english", code="en", enabled=true, translations=["anglais", "engels"]},
+	{label="dutch", code="nl", enabled=false, translations=["néerlandais", "nederlands"]},
+]
+table = {"url"= "/", title="welcome"}
+dt1  = 2011-06-11T15:00:00+02:00
+dt2  = 2011-06-11 15:00:00.000Z
+dt3  = 2011-06-11 15:00:00.000123Z
+	`
+	var m interface{}
+	if err := Decode(strings.NewReader(sample), &m); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodeMap(t *testing.T) {
+	m := make(map[string]interface{})
+	if err := decodeFile(&m); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func testDecodeInterface(t *testing.T) {
@@ -91,10 +120,5 @@ func testDecodePointers(t *testing.T) {
 }
 
 func decodeFile(p interface{}) error {
-	r, err := os.Open("testdata/package.toml")
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	return Decode(r, p)
+	return DecodeFile("testdata/package.toml", p)
 }

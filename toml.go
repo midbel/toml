@@ -425,7 +425,7 @@ func isInterface(k reflect.Kind) bool {
 }
 
 var (
-	tzFormat   = "Z07:00"
+	tzFormat   = "+07:00"
 	dateFormat = "2006-01-02"
 	timeFormat = "15:04:05"
 	dtFormat1  = dateFormat + "T" + timeFormat
