@@ -33,8 +33,10 @@ func Decode(r io.Reader, v interface{}) error {
 		return fmt.Errorf("invalid given type %s", e.Type())
 	}
 	if e.Kind() == reflect.Interface && e.NumMethod() == 0 {
-		m := make(map[string]interface{})
-		me := reflect.ValueOf(m).Elem()
+		var (
+			m  = make(map[string]interface{})
+			me = reflect.ValueOf(m).Elem()
+		)
 		if err = decodeMap(root, me); err == nil {
 			e.Set(me)
 		}
@@ -47,6 +49,15 @@ func Decode(r io.Reader, v interface{}) error {
 func decodeTable(t *Table, e reflect.Value) error {
 	var err error
 	switch k := e.Kind(); k {
+	case reflect.Interface:
+		var (
+			m  = make(map[string]interface{})
+			me = reflect.ValueOf(m)
+		)
+		err = decodeMap(t, me)
+		if err == nil {
+			e.Set(me)
+		}
 	case reflect.Struct:
 		err = decodeStruct(t, e)
 	case reflect.Map:
@@ -299,8 +310,18 @@ func decodeMap(t *Table, e reflect.Value) error {
 		)
 		switch n := n.(type) {
 		case *Table:
-			f, k = reflect.MakeMap(e.Type()), n.key.Literal
-			err = decodeTable(n, f)
+			k = n.key.Literal
+			if n.kind == tableArray {
+				var (
+					vs = make([]interface{}, 0, len(n.nodes))
+					m  = reflect.MakeSlice(reflect.TypeOf(vs), 0, len(n.nodes))
+				)
+				f = reflect.New(m.Type()).Elem()
+				err = decodeArrayTable(n, f)
+			} else {
+				f = reflect.MakeMap(e.Type())
+				err = decodeMap(n, f)
+			}
 		case *Option:
 			f, k = reflect.New(e.Type().Elem()).Elem(), n.key.Literal
 			err = decodeOption(n, f)
