@@ -48,6 +48,7 @@ func TestDecode(t *testing.T) {
 	t.Run("interface", testDecodeInterface)
 	t.Run("map", testDecodeMap)
 	t.Run("mix", testDecodeMix)
+	t.Run("mapalt", testDecodeMapAlt)
 }
 
 func testDecodeMix(t *testing.T) {
@@ -65,6 +66,29 @@ dt3  = 2011-06-11 15:00:00.000123Z
 	`
 	var m interface{}
 	if err := Decode(strings.NewReader(sample), &m); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodeMapAlt(t *testing.T) {
+	const sample = `
+location="/var/run/mail"
+filters = [
+	{field="from", value="midbel@foobar.org"},
+	{field="to", value="midbel@foobar.org"},
+	{field="subject", value="midbel@foobar.org"},
+]
+[headers]
+from = "foobar@foobar.org"
+to   = "*"
+attachment = "midbel"
+	`
+	c := struct {
+		Location string
+		Filters  []interface{}
+		Headers  map[string]interface{}
+	}{}
+	if err := Decode(strings.NewReader(sample), &c); err != nil {
 		t.Fatal(err)
 	}
 }

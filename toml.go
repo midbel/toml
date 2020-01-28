@@ -185,7 +185,7 @@ func decodeTime(e reflect.Value, str string, patterns []string) error {
 			}
 		}
 		if when.IsZero() && err == nil {
-			err = fmt.Errorf("time(%s): no pattern matched", str)
+			err = fmt.Errorf("time(%s): no patterns matched", str)
 		}
 		return err
 	}
@@ -425,7 +425,7 @@ func isInterface(k reflect.Kind) bool {
 }
 
 var (
-	tzFormat   = "+07:00"
+	tzFormat   = "Z07:00"
 	dateFormat = "2006-01-02"
 	timeFormat = "15:04:05"
 	dtFormat1  = dateFormat + "T" + timeFormat
@@ -439,6 +439,7 @@ func makePatterns(patterns []string) []string {
 	millis := []string{millisPrec, microsPrec}
 	for _, p := range patterns {
 		ps = append(ps, p)
+		ps = append(ps, p+tzFormat)
 		for _, m := range millis {
 			ps = append(ps, p+m)
 			ps = append(ps, p+m+tzFormat)
