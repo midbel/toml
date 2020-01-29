@@ -1,55 +1,15 @@
 package toml
 
 import (
-	"bytes"
 	"fmt"
 	"io"
+	"math"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/midbel/toml/internal/scan"
 )
-
-const (
-	eof     = scan.EOF
-	dot     = scan.Dot
-	lsquare = scan.LeftSquareBracket
-	rsquare = scan.RightSquareBracket
-	lcurly  = scan.LeftCurlyBracket
-	rcurly  = scan.RightCurlyBracket
-	equal   = scan.Equal
-	comma   = scan.Comma
-)
-
-type UnknownError struct {
-	elem, name string
-}
-
-func (u UnknownError) Error() string {
-	return fmt.Sprintf("toml: %s not recognized: %q!", u.elem, strings.Trim(u.name, "\""))
-}
-
-type SyntaxError struct {
-	want, got rune
-}
-
-func (s SyntaxError) Error() string {
-	if s.want <= 0 && s.got <= 0 {
-		return fmt.Sprintf("toml: invalid syntax")
-	}
-	w, g := scan.TokenString(s.want), scan.TokenString(s.got)
-	return fmt.Sprintf("toml: invalid syntax! want %s but got %s", w, g)
-}
-
-type Decoder struct {
-	scanner *scan.Scanner
-}
-
-func Unmarshal(bs []byte, v interface{}) error {
-	return NewDecoder(bytes.NewReader(bs)).Decode(v)
-}
 
 func DecodeFile(file string, v interface{}) error {
 	r, err := os.Open(file)
@@ -61,367 +21,494 @@ func DecodeFile(file string, v interface{}) error {
 }
 
 func Decode(r io.Reader, v interface{}) error {
-	return NewDecoder(r).Decode(v)
-}
-
-func NewDecoder(r io.Reader) *Decoder {
-	s := scan.NewScanner(r)
-	return &Decoder{s}
-}
-
-func (d *Decoder) Decode(v interface{}) error {
-	e := reflect.ValueOf(v)
-	if k := e.Kind(); k != reflect.Ptr {
-		return fmt.Errorf("expected pointer! got %s", k)
-	}
-	return d.decode(e.Elem())
-}
-
-func (d *Decoder) DecodeElement(v interface{}) error {
-	e := reflect.ValueOf(v)
-	if k := e.Kind(); k != reflect.Ptr {
-		return fmt.Errorf("expected pointer! got %s", k)
-	}
-	switch e := e.Elem(); d.scanner.Last {
-	case scan.Ident:
-		return d.decodeBody(e)
-	case equal:
-		return d.decodeOption(e)
-	default:
-		return fmt.Errorf("can only be called to decode table or option")
-	}
-}
-
-func (d *Decoder) decode(v reflect.Value) error {
-	d.scanner.Scan()
-	if err := d.decodeBody(v); err != nil {
+	n, err := Parse(r)
+	if err != nil {
 		return err
 	}
-	vs := options(v)
-	for t := d.scanner.Scan(); t != scan.EOF; t = d.scanner.Scan() {
-		if err := d.decodeElement(vs); err != nil {
-			return err
-		}
+	root, ok := n.(*Table)
+	if !ok {
+		return fmt.Errorf("root node is not a table!") // should never happen
 	}
-	return nil
-}
-
-func (d *Decoder) decodeElement(vs map[string]reflect.Value) error {
-	var (
-		v  reflect.Value
-		ok bool
-	)
-	for t := d.scanner.Last; t != rsquare && t != scan.EOF; t = d.scanner.Scan() {
-		switch t {
-		case scan.Ident:
-			v, ok = vs[d.scanner.Text()]
-			if !ok {
-				return tableNotFound(d.scanner.Text())
-			}
-		case lsquare:
-			continue
-		case scan.Dot:
-			if k := v.Kind(); k == reflect.Slice {
-				if v.Len() == 0 {
-					x := reflect.New(v.Type().Elem()).Elem()
-					v.Set(reflect.Append(v, x))
-				}
-				v = v.Index(v.Len() - 1)
-			}
-			d.scanner.Scan()
-			return d.decodeElement(options(v))
-		default:
-			return unexpectedToken(t)
-		}
+	e := reflect.ValueOf(v)
+	if e.Kind() != reflect.Ptr || e.IsNil() {
+		return fmt.Errorf("invalid given type %s", e.Type())
 	}
-	for t := d.scanner.Last; t == rsquare; t = d.scanner.Scan() {
-	}
-	if k := v.Kind(); k == reflect.Slice {
-		x := reflect.New(v.Type().Elem()).Elem()
-		defer appendValue(v, x)
-		v = x
-	}
-	return d.decodeBody(v)
-}
-
-func trimQuotes(s string) string {
-	return strings.TrimFunc(s, func(r rune) bool {
-		return r == '\'' || r == '"'
-	})
-}
-
-func (d *Decoder) decodeBody(v reflect.Value) error {
-	if v.Kind() == reflect.Map {
-		return d.decodeBodyMap(v)
-	}
-	vs := options(v)
-	seen := make(map[string]struct{})
-	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
-		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return malformed("invalid key")
+	if e.Kind() == reflect.Interface && e.NumMethod() == 0 {
+		var (
+			m  = make(map[string]interface{})
+			me = reflect.ValueOf(m).Elem()
+		)
+		if err = decodeMap(root, me); err == nil {
+			e.Set(me)
 		}
-		k := trimQuotes(d.scanner.Text())
-		if _, ok := seen[k]; ok {
-			return fmt.Errorf("duplicate option %s", k)
-		}
-		seen[k] = struct{}{}
-
-		f, ok := vs[k]
-		if !ok {
-			return optionNotFound(d.scanner.Text())
-		}
-		if t := d.scanner.Scan(); t != equal {
-			return invalidSyntax(t, equal)
-		}
-		if err := d.decodeOption(f); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *Decoder) decodeBodyMap(v reflect.Value) error {
-	v.Set(reflect.MakeMap(v.Type()))
-
-	for t := d.scanner.Last; t != lsquare && t != eof; t = d.scanner.Scan() {
-		if t != scan.String && t != scan.Ident && t != scan.Int {
-			return malformed("invalid key")
-		}
-		k := trimQuotes(d.scanner.Text())
-		f := reflect.New(v.Type().Elem()).Elem()
-		if t := d.scanner.Scan(); t != equal {
-			return invalidSyntax(t, equal)
-		}
-		if err := d.decodeOption(f); err != nil {
-			return err
-		}
-		v.SetMapIndex(reflect.ValueOf(k), f)
-	}
-	return nil
-}
-
-func (d *Decoder) decodeOption(v reflect.Value) error {
-	var err error
-	switch t := d.scanner.Scan(); t {
-	case lsquare:
-		err = parseInlineArray(d.scanner, v)
-	case lcurly:
-		err = parseInlineTable(d.scanner, v)
-	default:
-		err = parseSimple(d.scanner, v)
+	} else {
+		err = decodeTable(root, e.Elem())
 	}
 	return err
 }
 
-func malformed(m string) error {
-	return fmt.Errorf("toml: invalid syntax: %s", m)
-}
-
-func invalidSyntax(w, g rune) error {
-	return SyntaxError{w, g}
-}
-
-func unexpectedToken(g rune) error {
-	return fmt.Errorf("toml: invalid syntax! unexpected token %s", scan.TokenString(g))
-}
-
-func tableNotFound(n string) error {
-	return UnknownError{"table", n}
-}
-
-func optionNotFound(n string) error {
-	return UnknownError{"option", n}
-}
-
-type settableValue struct {
-	Value reflect.Value
-	Set   bool
-
-	Table  string
-	Option string
-}
-
-func options(v reflect.Value) map[string]reflect.Value {
-	if k := v.Kind(); k == reflect.Ptr {
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
+func decodeTable(t *Table, e reflect.Value) error {
+	var err error
+	switch k := e.Kind(); k {
+	case reflect.Interface:
+		var (
+			m  = make(map[string]interface{})
+			me = reflect.ValueOf(m)
+		)
+		err = decodeMap(t, me)
+		if err == nil {
+			e.Set(me)
 		}
-		v = v.Elem()
+	case reflect.Struct:
+		err = decodeStruct(t, e)
+	case reflect.Map:
+		err = decodeMap(t, e)
+	case reflect.Ptr:
+		if e.IsNil() {
+			f := reflect.New(e.Type().Elem())
+			if err = decodeTable(t, reflect.Indirect(f)); err == nil {
+				e.Set(f)
+			}
+		} else {
+			err = decodeTable(t, e.Elem())
+		}
+	default:
+		err = fmt.Errorf("table: unexpected type %s", k)
 	}
-	if k := v.Kind(); k != reflect.Struct {
-		return nil
+	return err
+}
+
+func decodeArrayTable(t *Table, e reflect.Value) error {
+	if k := e.Kind(); !(k == reflect.Array || k == reflect.Slice) {
+		return fmt.Errorf("array: expected array/slice, got %s", k)
 	}
+	for _, n := range t.nodes {
+		x, ok := n.(*Table)
+		if !ok {
+			return fmt.Errorf("array: unexpected node type %T", n)
+		}
+		f := reflect.New(e.Type().Elem()).Elem()
+		if err := decodeTable(x, f); err != nil {
+			return err
+		}
+		e.Set(reflect.Append(e, f))
+	}
+	return nil
+}
+
+func decodeArrayOption(a *Array, e reflect.Value) error {
+	if isInterface(e.Kind()) {
+		var (
+			s = reflect.SliceOf(e.Type())
+			f = reflect.MakeSlice(s, 0, len(a.nodes))
+		)
+		f = reflect.New(f.Type()).Elem()
+		err := decodeArrayOption(a, f)
+		if err == nil {
+			e.Set(f)
+		}
+		return err
+	}
+	if k := e.Kind(); !(k == reflect.Array || k == reflect.Slice) {
+		return fmt.Errorf("array: expected array/slice, got %s", k)
+	}
+	var err error
+	for _, n := range a.nodes {
+		f := reflect.New(e.Type().Elem()).Elem()
+		switch n := n.(type) {
+		case *Table:
+			err = decodeTable(n, f)
+		case *Array:
+			err = decodeArrayOption(n, f)
+		case *Literal:
+			err = decodeLiteral(n, f)
+		default:
+			err = fmt.Errorf("array: unexpected node type %T", n)
+		}
+		if err != nil {
+			break
+		}
+		e.Set(reflect.Append(e, f))
+	}
+	return err
+}
+
+func decodeOption(o *Option, e reflect.Value) error {
+	var err error
+	switch n := o.value.(type) {
+	case *Array:
+		err = decodeArrayOption(n, e)
+	case *Table:
+		err = decodeTable(n, e)
+	case *Literal:
+		err = decodeLiteral(n, e)
+	default:
+		err = fmt.Errorf("option: unexpected node type %T", n)
+	}
+	return err
+}
+
+func decodeLiteral(i *Literal, e reflect.Value) error {
+	var err error
+	switch str := i.token.Literal; i.token.Type {
+	default:
+		err = fmt.Errorf("literal: unexpected token type: %s", i.token)
+	case String:
+		err = decodeString(e, str)
+	case Bool:
+		err = decodeBool(e, str)
+	case Integer:
+		err = decodeInt(e, str)
+	case Float:
+		err = decodeFloat(e, str)
+	case DateTime:
+		patterns := makePatterns([]string{dtFormat1, dtFormat2})
+		err = decodeTime(e, str, patterns)
+	case Date:
+		err = decodeTime(e, str, []string{dateFormat})
+	case Time:
+		// err = decodeTime(e, str)
+	}
+	return err
+}
+
+func decodeTime(e reflect.Value, str string, patterns []string) error {
+	var (
+		when time.Time
+		err  error
+	)
+	if e.Type().AssignableTo(reflect.TypeOf(when)) || isInterface(e.Kind()) {
+		for _, p := range patterns {
+			when, err = time.Parse(p, str)
+			if err == nil {
+				e.Set(reflect.ValueOf(when))
+				break
+			}
+		}
+		if when.IsZero() && err == nil {
+			err = fmt.Errorf("time(%s): no patterns matched", str)
+		}
+		return err
+	}
+	if !isString(e.Kind()) {
+		err = fmt.Errorf("time(%s): unsupported type %s", str, e.Type())
+	} else {
+		e.SetString(str)
+	}
+	return err
+}
+
+func decodeFloat(e reflect.Value, str string) error {
+	str = strings.ReplaceAll(str, "_", "")
+
+	val, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return err
+	}
+	switch k := e.Kind(); {
+	case isString(k):
+		e.SetString(str)
+	case isInt(k):
+		if err = checkIntRange(k, int64(val)); err != nil {
+			break
+		}
+		e.SetInt(int64(val))
+	case isUint(k):
+		if err = checkUintRange(k, uint64(val)); err != nil {
+			break
+		}
+		if val >= 0 {
+			e.SetUint(uint64(val))
+		} else {
+			err = fmt.Errorf("float(%s): negative number to unsigned", str)
+		}
+	case isFloat(k):
+		if err = checkFloatRange(k, val); err != nil {
+			break
+		}
+		e.SetFloat(val)
+	case isInterface(k):
+		e.Set(reflect.ValueOf(val))
+	default:
+		err = fmt.Errorf("float(%s): unsupported type %s", str, k)
+	}
+	return err
+}
+
+func decodeInt(e reflect.Value, str string) error {
+	str = strings.ReplaceAll(str, "_", "")
+
+	val, err := strconv.ParseInt(str, 0, 64)
+	if err != nil {
+		return err
+	}
+	switch k := e.Kind(); {
+	case isString(k):
+		e.SetString(str)
+	case isInt(k):
+		if err = checkIntRange(k, val); err != nil {
+			break
+		}
+		e.SetInt(val)
+	case isUint(k):
+		if err = checkUintRange(k, uint64(val)); err != nil {
+			break
+		}
+		e.SetUint(uint64(val))
+	case isFloat(k):
+		if err = checkFloatRange(k, float64(val)); err != nil {
+			break
+		}
+		e.SetFloat(float64(val))
+	case isInterface(k):
+		e.Set(reflect.ValueOf(val))
+	default:
+		err = fmt.Errorf("int(%s): unsupported type %s", str, k)
+	}
+	return err
+}
+
+func decodeBool(e reflect.Value, str string) error {
+	val, err := strconv.ParseBool(str)
+	if err != nil {
+		return err
+	}
+	switch k := e.Kind(); {
+	case isString(k):
+		e.SetString(str)
+	case isBool(k):
+		e.SetBool(val)
+	case isInterface(k):
+		e.Set(reflect.ValueOf(val))
+	default:
+		err = fmt.Errorf("bool(%s): unsupported type %s", str, k)
+	}
+	return err
+}
+
+func decodeString(e reflect.Value, str string) error {
+	var err error
+	switch k := e.Kind(); {
+	case isString(k):
+		e.SetString(str)
+	case isInterface(k):
+		e.Set(reflect.ValueOf(str))
+	default:
+		err = fmt.Errorf("string(%s): unsupported type %s", str, k)
+	}
+	return err
+}
+
+func decodeMap(t *Table, e reflect.Value) error {
+	key := e.Type().Key()
+	if k := key.Kind(); !isString(k) {
+		return fmt.Errorf("map: key should be of type string")
+	}
+	if e.IsNil() {
+		m := reflect.MakeMap(e.Type())
+		e.Set(m)
+	}
+	var err error
+	for _, n := range t.nodes {
+		var (
+			f reflect.Value
+			k string
+		)
+		switch n := n.(type) {
+		case *Table:
+			k = n.key.Literal
+			if n.kind == tableArray {
+				var (
+					vs = make([]interface{}, 0, len(n.nodes))
+					m  = reflect.MakeSlice(reflect.TypeOf(vs), 0, len(n.nodes))
+				)
+				f = reflect.New(m.Type()).Elem()
+				err = decodeArrayTable(n, f)
+			} else {
+				f = reflect.MakeMap(e.Type())
+				err = decodeMap(n, f)
+			}
+		case *Option:
+			f, k = reflect.New(e.Type().Elem()).Elem(), n.key.Literal
+			err = decodeOption(n, f)
+		default:
+			err = fmt.Errorf("map: unexpected node type %T", n)
+		}
+		if err != nil {
+			break
+		}
+		e.SetMapIndex(reflect.ValueOf(k), f)
+	}
+	return err
+}
+
+func decodeStruct(t *Table, e reflect.Value) error {
+	var (
+		err    error
+		fields = getFields(e)
+	)
+	for _, n := range t.nodes {
+		switch n := n.(type) {
+		case *Option:
+			f, ok := fields[n.key.Literal]
+			if !ok {
+				err = fmt.Errorf("%s: invalid option", n.key.Literal)
+				break
+			}
+			err = decodeOption(n, f)
+		case *Table:
+			f, ok := fields[n.key.Literal]
+			if !ok {
+				err = fmt.Errorf("%s: invalid table", n.key.Literal)
+				break
+			}
+			if n.kind == tableArray {
+				err = decodeArrayTable(n, f)
+			} else {
+				err = decodeTable(n, f)
+			}
+		default:
+			err = fmt.Errorf("table: unexpected node type %T", n)
+		}
+		if err != nil {
+			break
+		}
+	}
+	return err
+}
+
+func getFields(v reflect.Value) map[string]reflect.Value {
 	fs := make(map[string]reflect.Value)
-	for i, t := 0, v.Type(); i < v.NumField(); i++ {
+	if v.Kind() != reflect.Struct {
+		return fs
+	}
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
 		f := v.Field(i)
 		if !f.CanSet() {
 			continue
 		}
-		j := t.Field(i)
-		switch n := j.Tag.Get("toml"); {
-		case n == "-":
+		var (
+			tf  = typ.Field(i)
+			tag string
+		)
+		switch tag = tf.Tag.Get("toml"); tag {
+		case "-":
 			continue
-		case n == "":
-			fs[strings.ToLower(j.Name)] = f
+		case "":
+			tag = strings.ToLower(tf.Name)
 		default:
-			fs[n] = f
 		}
+		fs[tag] = f
 	}
 	return fs
 }
 
-func appendValue(a, v reflect.Value) {
-	a.Set(reflect.Append(a, v))
+func isString(k reflect.Kind) bool {
+	return k == reflect.String
 }
 
-type Setter interface {
-	Set(string) error
-}
-
-var setterType = reflect.TypeOf((*Setter)(nil)).Elem()
-
-func asSetter(f reflect.Value, v string) (bool, error) {
-	if f.CanAddr() {
-		return asSetter(f.Addr(), v)
-	}
-	if f.CanInterface() && f.Type().Implements(setterType) {
-		s := f.Interface().(Setter)
-		return true, s.Set(v)
-	}
-	return false, nil
-}
-
-func parseSimple(s *scan.Scanner, f reflect.Value) error {
-	var v string
-	if s.Last != scan.String {
-		v = strings.Trim(s.Text(), "\"")
-	} else {
-		v = trimQuotes(s.Text())
-	}
-
-	if ok, err := asSetter(f, v); ok {
-		return err
-	}
-	switch t, k := s.Last, f.Kind(); {
-	case t == scan.Ident && k == reflect.Bool:
-		n, _ := strconv.ParseBool(v)
-		f.SetBool(n)
-	case t == scan.String && k == reflect.String:
-		f.SetString(v)
-	case t == scan.Int && isInt(k):
-		n, _ := strconv.ParseInt(v, 0, 64)
-		f.SetInt(n)
-	case (t == scan.Int || t == scan.Uint) && isUint(k):
-		n, _ := strconv.ParseUint(v, 0, 64)
-		f.SetUint(n)
-	case (t == scan.Float || t == scan.Int || t == scan.Uint) && isFloat(k):
-		n, _ := strconv.ParseFloat(v, 64)
-		f.SetFloat(n)
-	case (t == scan.Date || t == scan.DateTime) && isTime(f):
-		var set bool
-		for _, df := range dateFormats {
-			t, err := time.Parse(df, v)
-			if err == nil {
-				f.Set(reflect.ValueOf(t))
-				set = true
-				break
-			}
-		}
-		if !set {
-			return fmt.Errorf("no date format match %s", v)
-		}
-	default:
-		return fmt.Errorf("toml: unsupported type: %s (%s)", scan.TokenString(s.Last), k)
-	}
-	return nil
-}
-
-var dateFormats = []string{
-	time.RFC3339,
-	"2006-01-02 15:04:05.000Z",
-	"2006-01-02 15:04:05Z",
-	"2006-01-02T15:04:05",
-	"2006-01-02T15:04:05.000",
-	"2006-01-02 15:04:05.000",
-	"2006-01-02 15:04:05",
-	"2006-01-02",
-}
-
-func parseInlineArray(s *scan.Scanner, f reflect.Value) error {
-	for t := s.Scan(); t != rsquare && t != eof; t = s.Scan() {
-		if t == comma {
-			continue
-		}
-		var err error
-		x := reflect.New(f.Type().Elem()).Elem()
-		switch t {
-		case lcurly:
-			err = parseInlineTable(s, x)
-		case lsquare:
-			err = parseInlineArray(s, x)
-		default:
-			err = parseSimple(s, x)
-		}
-		f.Set(reflect.Append(f, x))
-		if err != nil {
-			return err
-		}
-		if r := s.Peek(); r != rsquare && r != comma {
-			// return invalidSyntax(r)
-			return fmt.Errorf("array: invalid syntax! got %c want %c or %c", r, rsquare, comma)
-		}
-	}
-	return nil
-}
-
-func parseInlineTable(s *scan.Scanner, f reflect.Value) error {
-	vs := options(f)
-	for t := s.Scan(); t != rcurly && t != eof; t = s.Scan() {
-		if t == comma {
-			continue
-		}
-		var err error
-
-		x, ok := vs[s.Text()]
-		if !ok {
-			return fmt.Errorf("unknown option %q", s.Text())
-		}
-		if t := s.Scan(); t != equal {
-			// return invalidSyntax(equal, t)
-			return fmt.Errorf("table: invalid syntax! got %c want %c", t, equal)
-		}
-		switch t := s.Scan(); t {
-		case lcurly:
-			err = parseInlineTable(s, x)
-		case lsquare:
-			err = parseInlineArray(s, x)
-		default:
-			err = parseSimple(s, x)
-		}
-		if err != nil {
-			return err
-		}
-		if r := s.Peek(); r != rcurly && r != comma {
-			// return invalidSyntax(r)
-			return fmt.Errorf("table: invalid syntax! got %c want %c or %c", r, rcurly, comma)
-		}
-	}
-	return nil
+func isBool(k reflect.Kind) bool {
+	return k == reflect.Bool
 }
 
 func isInt(k reflect.Kind) bool {
-	return k == reflect.Int || k == reflect.Int8 || k == reflect.Int16 || k == reflect.Int32 || k == reflect.Int64
+	return k == reflect.Int || k == reflect.Int8 || k == reflect.Int16 ||
+		k == reflect.Int32 || k == reflect.Int64
+}
+
+func checkIntRange(k reflect.Kind, val int64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Int8:
+		ok = val >= math.MinInt8 && val <= math.MaxInt8
+	case reflect.Int16:
+		ok = val >= math.MinInt16 && val <= math.MaxInt16
+	case reflect.Int32:
+		ok = val >= math.MinInt32 && val <= math.MaxInt32
+	case reflect.Int64, reflect.Int:
+		ok = val >= math.MinInt64 && val <= math.MaxInt64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%d): out of range", k, val)
+	}
+	return err
 }
 
 func isUint(k reflect.Kind) bool {
-	return k == reflect.Uint || k == reflect.Uint8 || k == reflect.Uint16 || k == reflect.Uint32 || k == reflect.Uint64
+	return k == reflect.Uint || k == reflect.Uint8 || k == reflect.Uint16 ||
+		k == reflect.Uint32 || k == reflect.Uint64
+}
+
+func checkUintRange(k reflect.Kind, val uint64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Uint8:
+		ok = val <= math.MaxUint8
+	case reflect.Uint16:
+		ok = val <= math.MaxUint16
+	case reflect.Uint32:
+		ok = val <= math.MaxUint32
+	case reflect.Uint64, reflect.Uint:
+		ok = val <= math.MaxUint64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%d): out of range", k, val)
+	}
+	return err
 }
 
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
 }
 
-func isTime(v reflect.Value) bool {
-	var z time.Time
-	return v.Type().AssignableTo(reflect.TypeOf(z))
+func checkFloatRange(k reflect.Kind, val float64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Float32:
+		ok = val >= -math.MaxFloat32 && val <= math.MaxFloat32
+	case reflect.Float64:
+		ok = val >= -math.MaxFloat64 && val <= math.MaxFloat64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%f): out of range", k, val)
+	}
+	return err
+}
+
+func isInterface(k reflect.Kind) bool {
+	return k == reflect.Interface
+}
+
+var (
+	tzFormat   = "Z07:00"
+	dateFormat = "2006-01-02"
+	timeFormat = "15:04:05"
+	dtFormat1  = dateFormat + "T" + timeFormat
+	dtFormat2  = dateFormat + " " + timeFormat
+	millisPrec = ".000"
+	microsPrec = ".000000"
+)
+
+func makePatterns(patterns []string) []string {
+	ps := make([]string, 0, len(patterns)*4)
+	millis := []string{millisPrec, microsPrec}
+	for _, p := range patterns {
+		ps = append(ps, p)
+		ps = append(ps, p+tzFormat)
+		for _, m := range millis {
+			ps = append(ps, p+m)
+			ps = append(ps, p+m+tzFormat)
+		}
+	}
+	return ps
 }

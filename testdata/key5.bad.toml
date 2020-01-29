@@ -1,0 +1,2 @@
+# option should be follow by a newline
+array = [1, 2] value = "invalid"

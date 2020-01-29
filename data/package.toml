@@ -1,0 +1,37 @@
+package    = "toml"
+version    = "1.0.0"
+repository = "https://github.com/midbel/toml"
+provides   = ["toml", "tomllint"]
+revision   = 18
+
+[dev]
+name  = "midbel"
+email = "noreply@midbel.org"
+
+  [[dev.project]]
+  repository = "https://github.com/midbel/glob"
+  version    = "0.1.1"
+  active     = true
+
+  [[dev.project]]
+  repository = "https://github.com/midbel/maestro"
+  version    = "0.1.0"
+  active     = true
+
+[[changelog]]
+date   = 2019-10-09
+author = "midbel"
+desc   = "changelog entry #1"
+
+[[changelog]]
+date   = 2019-10-16
+author = "midbel"
+desc   = "changelog entry #2"
+
+[[dependency]]
+repository = "https://github.com/midbel/glob"
+version    = "0.0.0"
+
+[[dependency]]
+repository = "https://github.com/midbel/toml"
+version    = "0.0.0"

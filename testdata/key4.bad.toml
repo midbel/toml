@@ -1,0 +1,3 @@
+# invalid: try to replace an option by a table
+a.b = 1
+a.b.c = 2

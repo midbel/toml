@@ -1,392 +1,148 @@
 package toml
 
 import (
-	"fmt"
-	"net"
 	"strings"
 	"testing"
 	"time"
 )
 
-type addr net.TCPAddr
-
-func (a *addr) Set(v string) error {
-	t, err := net.ResolveTCPAddr("tcp", v)
-	if err != nil {
-		return err
-	}
-	*a = addr(*t)
-	return nil
+type Dependency struct {
+	Repository string
+	Version    string
 }
 
-type user struct {
-	Name   string `toml:"name"`
-	Passwd string `toml:"passwd"`
+type Changelog struct {
+	Author string
+	Text   string    `toml:"desc"`
+	When   time.Time `toml:"date"`
 }
 
-type pool struct {
-	Proxy string `toml:"proxy"`
-	User  user   `toml:"auth"`
-	Hosts []conn `toml:"databases"`
+type Dev struct {
+	Name     string
+	Email    string
+	Projects []Project `toml:"project"`
 }
 
-type conn struct {
-	Server  string   `toml:"server"`
-	Ports   []uint16 `toml:"ports"`
-	Limit   uint16   `toml:"limit"`
-	Enabled bool     `toml:"enabled"`
-	User    user     `toml:"auth"`
+type Project struct {
+	Repo    string `toml:"repository"`
+	Version string
+	Active  bool
 }
 
-func TestDecoderFailures(t *testing.T) {
-	s1 := `
-name = "hello world",
-control = {
-	accept = ["a", "b"],
-	reject = ["c", "d"],
-}
-	`
-	s2 := `
-name = "hello world"
-control = {
-	accept = ["a", "b"]
-	reject = ["c", "d"]
-}
-	`
-	s3 := `
-name = #invalid
-control = {
-	accept = ["a", "b"]
-	reject = ["c", "d"]
-}
-	`
-	s4 := `
-name = "hello world"
-control = {
-	accept = ["a" "b"],
-	reject = ["c" "d"],
-}
-	`
-	s5 := `
-name = "hellorules101"
-name = "worldrules101"
-	`
-	c := struct {
-		Name    string
-		Control struct {
-			Accept []string
-			Reject []string
-		}
-	}{}
-	for _, s := range []string{s1, s2, s3, s4, s5} {
-		if err := NewDecoder(strings.NewReader(s)).Decode(&c); err == nil {
-			t.Log(s)
-			t.Error("failure expected but string has been decoded properly")
-		}
-	}
+type Package struct {
+	Name     string `toml:"package"`
+	Version  string
+	Repo     string `toml:"repository"`
+	Provides []string
+	Revision int
+
+	Dev
+
+	Deps []Dependency `toml:"dependency"`
+	Logs []Changelog  `toml:"changelog"`
 }
 
-func TestDecodeNestedTags(t *testing.T) {
-	s := `
-name = "TestDecodeNestedTags"
-
-[access]
-accept = ["root", "www-data"]
-reject = ["nobody"]
-	`
-	c := struct {
-		Name   string
-		Accept []string `toml:"access>accept"`
-		Reject []string `toml:"access>reject"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
+func TestDecode(t *testing.T) {
+	t.Run("values", testDecodeValues)
+	t.Run("pointers", testDecodePointers)
+	t.Run("interface", testDecodeInterface)
+	t.Run("map", testDecodeMap)
+	t.Run("mix", testDecodeMix)
+	t.Run("mapalt", testDecodeMapAlt)
 }
 
-func TestDecodeSkipField(t *testing.T) {
-	s := `
-name = "TestDecodeSkipField"
-	`
-	c := struct {
-		Name    string `toml:"name"`
-		Package string `toml:"-"`
-	}{Package: "toml"}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-	if c.Package != "toml" {
-		t.Fatal("Package field has been modified")
-	}
-}
-
-func TestDecodeQuottedKey(t *testing.T) {
-	s := `
-"double" = "quotation mark"
-'single' = "single quote"
-	`
-	c := struct {
-		Double string `toml:"double"`
-		Single string `toml:"single"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Logf("%+v", c)
-		t.Fatal(err)
-	}
-}
-
-func TestDecodeDatetime(t *testing.T) {
-	s := `
-odt1 = 1979-05-27T07:32:00Z
-odt2 = 1979-05-27T00:32:00-07:00
-odt3 = 1979-05-27T00:32:00.999999-07:00
-odt4 = 1979-05-27 00:32:00
-odt5 = 1979-05-27
-ldt1 = 1979-05-27T07:32:00
-ldt2 = 1979-05-27T00:32:00.999999
-  `
-	c := struct {
-		Odt1 time.Time `toml:"odt1"`
-		Odt2 time.Time `toml:"odt2"`
-		Odt3 time.Time `toml:"odt3"`
-		Odt4 time.Time `toml:"odt4"`
-		Odt5 time.Time `toml:"odt5"`
-		Ldt1 time.Time `toml:"ldt1"`
-		Ldt2 time.Time `toml:"ldt2"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecodePointer(t *testing.T) {
-	s := `
-address = "localhost:1024"
-
-[[channels]]
-server = "10.0.1.1:22"
-enabled = false
-auth = {name = "hello", passwd = "helloworld"}
-
-[[channels]]
-server = "10.0.1.2:22"
-enabled = false
-auth = {name = "hello", passwd = "helloworld"}
-	`
-	c := struct {
-		Addr  string  `toml:"address"`
-		Hosts []*conn `toml:"channels"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecoderCompositeValues(t *testing.T) {
-	s := `
-group = "224.0.0.1"
-ports = [[31001, 31002], [32001, 32002]]
-auth = [
-  {name = "midbel", passwd = "midbelrules101"},
-  {name = "toml", passwd = "tomlrules101"},
+func testDecodeMix(t *testing.T) {
+	const sample = `
+nested = [[1, 2, 3], [3.14, 15.6, 0.18]]
+inline = [
+	{label="french", code="fr", enabled=false, translations=["français", "frans"]},
+	{label="english", code="en", enabled=true, translations=["anglais", "engels"]},
+	{label="dutch", code="nl", enabled=false, translations=["néerlandais", "nederlands"]},
 ]
-  `
-	c1 := struct {
-		Group string
-		Ports [][]int64
-		Auth  []user
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c1); err != nil {
-		t.Fatal(err)
-	}
-	// c2 := struct {
-	// 	Group string
-	// 	Ports [][]int64
-	// 	Auth  []map[string]interface{}
-	// }{}
-	// if err := NewDecoder(strings.NewReader(s)).Decode(&c2); err != nil {
-	// 	t.Fatal(err)
-	// }
-}
-
-func TestDecoderKeyTypes(t *testing.T) {
-	s := `
-group = "224.0.0.1"
-31001 = 31002
-"enabled" = true
-  `
-	c := struct {
-		Host   string `toml:"group"`
-		Port   int64  `toml:"31001"`
-		Active bool   `toml:"enabled"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecodeNestedTables(t *testing.T) {
-	s := `
-title = "TOML parser test"
-
-[pool]
-proxy = "192.168.1.124"
-auth = {name = "midbel", passwd = "midbeltoml101"}
-
-[[pool.databases]]
-server = "192.168.1.1"
-ports = [8001, 8002, 8003]
-limit = 10
-
-[[pool.databases]]
-server = "192.168.1.1"
-ports = [8001, 8002, 8003]
-limit = 10
-auth = {name = "midbel", passwd = "tomlrules101"}
-  `
-	c := struct {
-		Title string `toml:"title"`
-		Pool  pool   `toml:"pool"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecodeTableArray(t *testing.T) {
-	s := `
-title = "TOML parser test"
-
-[[database]]
-server = "192.168.1.1"
-ports = [8001, 8002, 8003]
-limit = 10
-
-[[database]]
-server = "192.168.1.1"
-ports = [8001, 8002, 8003]
-limit = 10
-auth = {name = "midbel", passwd = "tomlrules101"}
-  `
-	c := struct {
-		Title    string `toml:"title"`
-		Settings []conn `toml:"database"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecodeSimple(t *testing.T) {
-	s := `
-title = "TOML parser test"
-
-[database]
-server = "192.168.1.1"
-ports = [ 8001, 8001, 8002 ]
-limit = 5000
-enabled = true
-  `
-	c := struct {
-		Title    string `toml:"title"`
-		Settings conn   `toml:"database"`
-	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDecodeMultilineString(t *testing.T) {
-	d := `this is an extended description for the toml linter
-
-* parse toml file
-* show syntax error and provide ticks to fix them
-* show syntax warning and provide tricks to solve them
-* really configurable
-
-enjoy the toml linter and the toml format
+table = {"url"= "/", title="welcome"}
+dt1  = 2011-06-11T15:00:00+02:00
+dt2  = 2011-06-11 15:00:00.000Z
+dt3  = 2011-06-11 15:00:00.000123Z
 	`
-	s := `
-name = "tomllint"
-version = "0.0"
-summary = "a linter for toml files"
-description = """%s"""
-	`
-	c := struct {
-		Name        string `toml:"name"`
-		Release     string `toml:"version"`
-		Summary     string `toml:"summary"`
-		Description string `toml:"description"`
-	}{}
-	s = fmt.Sprintf(s, d)
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-	if c.Description != d {
-		t.Fatal("descriptions does not match")
-	}
-}
-
-func TestDecodeIntoMap(t *testing.T) {
-	s := `
-title = "hello world"
-date  = 2019-02-10T15:40:00Z
-number = 10
-	`
-	var c map[string]interface{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-	if v, ok := c["title"]; ok {
-		_, ok := v.(string)
-		if !ok {
-			t.Fatal("title string not set")
-		}
-	}
-	if v, ok := c["date"]; ok {
-		_, ok := v.(time.Time)
-		if !ok {
-			t.Fatal("date time not set")
-		}
-	}
-	if v, ok := c["number"]; ok {
-		_, ok := v.(int)
-		if !ok {
-			t.Fatal("number int not set")
-		}
-	}
-}
-
-func TestDecodeFromSlices(t *testing.T) {
-	s := `
-[[user]]
-name = "roger lamotte"
-passwd = "tomlrules"
-[[user]]
-name = "pierre dubois"
-passwd = "gorules"
-	`
-	var cs []user
-	if err := NewDecoder(strings.NewReader(s)).Decode(&cs); err != nil {
+	var m interface{}
+	if err := Decode(strings.NewReader(sample), &m); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestDecodeEmptyString(t *testing.T) {
-	s := `
-title = "toml test"
-host  = ""
-users = [
-	{name = "roger", passwd = ""},
-	{name = "pierre", passwd = ""},
+func testDecodeMapAlt(t *testing.T) {
+	const sample = `
+location="/var/run/mail"
+filters = [
+	{field="from", value="midbel@foobar.org"},
+	{field="to", value="midbel@foobar.org"},
+	{field="subject", value="midbel@foobar.org"},
 ]
+[headers]
+from = "foobar@foobar.org"
+to   = "*"
+attachment = "midbel"
 	`
 	c := struct {
-		T  string `toml:"title"`
-		H  string `toml:"host"`
-		Us []user `toml:"users"`
+		Location string
+		Filters  []interface{}
+		Headers  map[string]interface{}
 	}{}
-	if err := NewDecoder(strings.NewReader(s)).Decode(&c); err != nil {
+	if err := Decode(strings.NewReader(sample), &c); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func testDecodeMap(t *testing.T) {
+	m := make(map[string]interface{})
+	if err := decodeFile(&m); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodeInterface(t *testing.T) {
+	var m interface{}
+	if err := decodeFile(&m); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodeValues(t *testing.T) {
+	p := struct {
+		Name     string `toml:"package"`
+		Version  string
+		Repo     string `toml:"repository"`
+		Provides []string
+		Revision int
+
+		Dev
+
+		Deps []Dependency `toml:"dependency"`
+		Logs []Changelog  `toml:"changelog"`
+	}{}
+	if err := decodeFile(&p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testDecodePointers(t *testing.T) {
+	p := struct {
+		Name     string `toml:"package"`
+		Version  string
+		Repo     string `toml:"repository"`
+		Provides []string
+		Revision int
+
+		*Dev
+
+		Deps []*Dependency `toml:"dependency"`
+		Logs []*Changelog  `toml:"changelog"`
+	}{}
+	if err := decodeFile(&p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodeFile(p interface{}) error {
+	return DecodeFile("testdata/package.toml", p)
 }

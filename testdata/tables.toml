@@ -1,0 +1,35 @@
+default = "table"
+
+#empty table are allow
+[empty]
+
+[table]
+key1 = "option"
+key2 = 100
+
+[[table.subtable]]
+ident = "sub-table1"
+
+[[table.subtable]]
+ident = "sub-table2"
+
+[world.europe.west.belgium]
+population = 11_000_000
+surface    = 32000 #km2
+languages  = ["french", "dutsh", "german"]
+
+[world]
+distance   = "1AU"
+diameter   = 6500
+population = 7_000_000_000 # 2019
+moon       = 1
+
+[fruit]
+apple.color = "red"
+apple.taste.sweet = true
+
+# [fruit.apple]  # INVALID
+# [fruit.apple.taste]  # INVALID
+
+[fruit.apple.texture]  # you can add sub-tables
+smooth = true

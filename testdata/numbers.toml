@@ -1,0 +1,25 @@
+integer = 100
+positive = +100
+negative = -100
+
+zero1 = 0
+zero2 = -0
+zero3 = +0
+zero4 = 0.0
+zero5 = +0.0
+zero6 = -0.0
+
+hexapos  = 0xdeadbeef
+# hexaneg  = -0xdeadbeef
+octalpos = 0o01234567
+# octalneg = -0o01234567
+binary   = 0b0000001
+
+float1 = 3.14159265
+float2 = -2.71828182
+float3 = 3e14
+float4 = 3e-14
+float5 = 3.14_15e92_65
+float6 = 1e06
+float7 = 5e+22
+float8 = -5e-22

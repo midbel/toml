@@ -1,0 +1,9 @@
+obj1 = {string="bar", bool=true, date=2019-10-25}
+obj2 = {number=123, float=3.14, time=09:52:10}
+
+array = [
+  {string="foo", bool=true, number=123},
+  {string="false", bool=true, number=456},
+]
+
+empty = {}

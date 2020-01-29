@@ -1,0 +1,26 @@
+string1 = "literal string"
+string2 = "literal\nstring"
+string3 = 'literal string'
+string4 = 'literal\string'
+string5 = 'D:\Play\src\github.com\midbel\toml'
+string6 = '.\**\*\*?.dat'
+
+string7 = """
+The quick brown \
+
+
+  fox jumps over \
+    the lazy dog."""
+
+string8 = """\
+       The quick brown \
+       fox jumps over \
+       the lazy dog.\
+       """
+
+string9 = '''
+The first newline is
+trimmed in raw strings.
+   All other whitespace
+   is preserved.
+'''

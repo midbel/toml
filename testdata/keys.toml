@@ -1,0 +1,28 @@
+ident     = "classic"
+com-pound = "compound"
+com_pound = "compound"
+mix123-45 = "mix"
+
+"ident1"   = "string are ident"
+'ident2'   = "string are ident"
+""         = "empty string is ident"
+
+12345     = "number are ident"
+
+3.14              = "pi is not a float"
+site."google.com" = "test"
+
+about.desc = "description"
+about.url  = "https://github.com/midbel/toml"
+
+x.type = ""
+y.type = ""
+
+x.name = ""
+y.name = ""
+
+x.data = ""
+y.data = ""
+
+top.leaf   = 2
+top.child.leaf = 1
