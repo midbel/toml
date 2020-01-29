@@ -223,7 +223,7 @@ func decodeFloat(e reflect.Value, str string) error {
 			err = fmt.Errorf("float(%s): negative number to unsigned", str)
 		}
 	case isFloat(k):
-		if err = checkFloatRange(k, float64(val)); err != nil {
+		if err = checkFloatRange(k, val); err != nil {
 			break
 		}
 		e.SetFloat(val)
