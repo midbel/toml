@@ -3,6 +3,7 @@ package toml
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strconv"
@@ -208,14 +209,23 @@ func decodeFloat(e reflect.Value, str string) error {
 	case isString(k):
 		e.SetString(str)
 	case isInt(k):
+		if err = checkIntRange(k, int64(val)); err != nil {
+			break
+		}
 		e.SetInt(int64(val))
 	case isUint(k):
+		if err = checkUintRange(k, uint64(val)); err != nil {
+			break
+		}
 		if val >= 0 {
 			e.SetUint(uint64(val))
 		} else {
 			err = fmt.Errorf("float(%s): negative number to unsigned", str)
 		}
 	case isFloat(k):
+		if err = checkFloatRange(k, float64(val)); err != nil {
+			break
+		}
 		e.SetFloat(val)
 	case isInterface(k):
 		e.Set(reflect.ValueOf(val))
@@ -228,34 +238,30 @@ func decodeFloat(e reflect.Value, str string) error {
 func decodeInt(e reflect.Value, str string) error {
 	str = strings.ReplaceAll(str, "_", "")
 
-	var err error
+	val, err := strconv.ParseInt(str, 0, 64)
+	if err != nil {
+		return err
+	}
 	switch k := e.Kind(); {
 	case isString(k):
 		e.SetString(str)
 	case isInt(k):
-		if i, err1 := strconv.ParseInt(str, 0, 64); err1 == nil {
-			e.SetInt(i)
-		} else {
-			err = err1
+		if err = checkIntRange(k, val); err != nil {
+			break
 		}
+		e.SetInt(val)
 	case isUint(k):
-		if i, err1 := strconv.ParseUint(str, 0, 64); err1 == nil {
-			e.SetUint(i)
-		} else {
-			err = err1
+		if err = checkUintRange(k, uint64(val)); err != nil {
+			break
 		}
+		e.SetUint(uint64(val))
 	case isFloat(k):
-		if i, err1 := strconv.ParseFloat(str, 64); err1 == nil {
-			e.SetFloat(i)
-		} else {
-			err = err1
+		if err = checkFloatRange(k, float64(val)); err != nil {
+			break
 		}
+		e.SetFloat(float64(val))
 	case isInterface(k):
-		if i, err1 := strconv.ParseInt(str, 0, 64); err1 == nil {
-			e.Set(reflect.ValueOf(i))
-		} else {
-			err = err1
-		}
+		e.Set(reflect.ValueOf(val))
 	default:
 		err = fmt.Errorf("int(%s): unsupported type %s", str, k)
 	}
@@ -411,13 +417,72 @@ func isInt(k reflect.Kind) bool {
 		k == reflect.Int32 || k == reflect.Int64
 }
 
+func checkIntRange(k reflect.Kind, val int64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Int8:
+		ok = val >= math.MinInt8 && val <= math.MaxInt8
+	case reflect.Int16:
+		ok = val >= math.MinInt16 && val <= math.MaxInt16
+	case reflect.Int32:
+		ok = val >= math.MinInt32 && val <= math.MaxInt32
+	case reflect.Int64, reflect.Int:
+		ok = val >= math.MinInt64 && val <= math.MaxInt64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%d): out of range", k, val)
+	}
+	return err
+}
+
 func isUint(k reflect.Kind) bool {
 	return k == reflect.Uint || k == reflect.Uint8 || k == reflect.Uint16 ||
 		k == reflect.Uint32 || k == reflect.Uint64
 }
 
+func checkUintRange(k reflect.Kind, val uint64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Uint8:
+		ok = val <= math.MaxUint8
+	case reflect.Uint16:
+		ok = val <= math.MaxUint16
+	case reflect.Uint32:
+		ok = val <= math.MaxUint32
+	case reflect.Uint64, reflect.Uint:
+		ok = val <= math.MaxUint64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%d): out of range", k, val)
+	}
+	return err
+}
+
 func isFloat(k reflect.Kind) bool {
 	return k == reflect.Float32 || k == reflect.Float64
+}
+
+func checkFloatRange(k reflect.Kind, val float64) error {
+	var (
+		ok  bool
+		err error
+	)
+	switch k {
+	case reflect.Float32:
+		ok = val >= -math.MaxFloat32 && val <= math.MaxFloat32
+	case reflect.Float64:
+		ok = val >= -math.MaxFloat64 && val <= math.MaxFloat64
+	}
+	if !ok {
+		err = fmt.Errorf("%s(%f): out of range", k, val)
+	}
+	return err
 }
 
 func isInterface(k reflect.Kind) bool {
