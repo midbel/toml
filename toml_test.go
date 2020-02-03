@@ -70,6 +70,26 @@ dt3  = 2011-06-11 15:00:00.000123Z
 	}
 }
 
+func testDecodeEmbededTypes( t *testing.T) {
+	const sample = `
+[[Filter]]
+type = "xlsx"
+name = "toml"
+[[Filter]]
+type = "pdf"
+name = "foobar"
+`
+	c := struct {
+		Filter []struct{
+			Type string
+			Name string
+		}
+	}{}
+	if err := Decode(strings.NewReader(sample), &c); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func testDecodeMapAlt(t *testing.T) {
 	const sample = `
 location="/var/run/mail"
