@@ -71,7 +71,7 @@ dt3  = 2011-06-11 15:00:00.000123Z
 	}
 }
 
-func testDecodeEmbededTypes( t *testing.T) {
+func testDecodeEmbededTypes(t *testing.T) {
 	const sample = `
 [[filter]]
 type = "xlsx"
@@ -81,7 +81,7 @@ type = "pdf"
 name = "foobar"
 `
 	c := struct {
-		Filter []struct{
+		Filter []struct {
 			Type string
 			Name string
 		}
