@@ -1,0 +1,57 @@
+service   = "foobar"
+instances = [1, 2, 3]
+age       = 3600
+
+[admin]
+name  = "midbel"
+email = "midbel@foobar.org"
+dob   = 2020-10-12T14:00:00Z
+
+[[servers.groups]]
+mode  = 0
+addr  = "239.192.0.1:31001"
+every = 60
+
+[[servers.groups]]
+mode  = 255
+addr  = "224.0.0.1:31001"
+every = 30
+
+[servers.prime]
+addr   = "10.10.1.1:10015"
+qn     = "prime.foobar.org"
+reboot = true
+
+[servers.backup]
+addr   = "10.10.1.15:10015"
+qn     = "backup.foobar.org"
+reboot = false
+
+[[client]]
+addr = "10.10.0.1:10001"
+tls  = false
+
+  [client.credential]
+  user   = "user1"
+  passwd = "temp123!"
+  roles  = ["user", "admin"]
+
+[[client]]
+addr = "10.10.0.2:10001"
+tls  = true
+rps  = 50
+
+  [client.credential]
+  user   = "user2"
+  passwd = "temp123!"
+  roles  = ["user"]
+
+[[client]]
+addr = "10.10.0.3:10001"
+tls  = true
+rps  = 50
+
+  [client.credential]
+  user   = "user3"
+  passwd = "temp123!"
+  roles  = ["user"]
