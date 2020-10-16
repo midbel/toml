@@ -44,8 +44,7 @@ func dumpNode(n Node, level int) {
 func dumpLiteral(n Node) string {
 	switch x := n.(type) {
 	case *Literal:
-		str := tokenString(x.token.Type)
-		return fmt.Sprintf("%s(%s)", str, x.token.Literal)
+		return x.token.String()
 	case *Array:
 		var b strings.Builder
 		b.WriteString("array")

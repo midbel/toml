@@ -5,20 +5,41 @@ import (
 )
 
 const (
-	EOF rune = -(iota + 1)
-	Ident
-	String
-	Integer
-	Float
-	Bool
-	Date
-	Time
-	DateTime
-	Illegal
-	Newline
-	Comment
-	Punct
+	TokEOF rune = -(iota) + 1
+	TokIdent
+	TokString
+	TokInteger
+	TokFloat
+	TokBool
+	TokDate
+	TokDatetime
+	TokTime
+	TokComment
+	TokIllegal
+	TokBegArray
+	TokEndArray
+	TokBegInline
+	TokEndInline
+	TokBegRegularTable
+	TokEndRegularTable
+	TokBegArrayTable
+	TokEndArrayTable
+	TokEqual
+	TokDot
+	TokComma
+	TokNewline
 )
+
+var constants = map[string]rune{
+	"true":  TokBool,
+	"false": TokBool,
+	"inf":   TokFloat,
+	"+inf":  TokFloat,
+	"-inf":  TokFloat,
+	"nan":   TokFloat,
+	"+nan":  TokFloat,
+	"-nan":  TokFloat,
+}
 
 type Position struct {
 	Line   int
@@ -46,9 +67,26 @@ type Token struct {
 	Pos     Position
 }
 
+func (t Token) isComment() bool {
+	return t.Type == TokComment
+}
+
+func (t Token) isTable() bool {
+	return t.Type == TokBegRegularTable || t.Type == TokBegArrayTable
+}
+
 func (t Token) IsIdent() bool {
 	switch t.Type {
-	case Ident, String, Integer:
+	case TokIdent, TokString, TokInteger:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t Token) isValue() bool {
+	switch t.Type {
+	case TokString, TokInteger, TokFloat, TokBool, TokDate, TokTime, TokDatetime:
 		return true
 	default:
 		return false
@@ -56,75 +94,68 @@ func (t Token) IsIdent() bool {
 }
 
 func (t Token) IsValid() bool {
-	return t.Type != Illegal
+	return t.Type != TokIllegal
 }
 
 func (t Token) IsNumber() bool {
-	return t.Type == Integer || t.Type == Float
+	return t.Type == TokInteger || t.Type == TokFloat
 }
 
 func (t Token) IsTime() bool {
-	return t.Type == DateTime || t.Type == Date || t.Type == Time
+	return t.Type == TokDatetime || t.Type == TokDate || t.Type == TokTime
 }
 
 func (t Token) String() string {
-	var str string
+	var prefix string
 	switch t.Type {
-	case Newline:
+	default:
+		prefix = "unknown"
+	case TokEOF:
+		return "<eof>"
+	case TokIdent:
+		prefix = "ident"
+	case TokString:
+		prefix = "string"
+	case TokInteger:
+		prefix = "integer"
+	case TokFloat:
+		prefix = "float"
+	case TokBool:
+		prefix = "boolean"
+	case TokDate:
+		prefix = "date"
+	case TokDatetime:
+		prefix = "datetime"
+	case TokTime:
+		prefix = "time"
+	case TokComment:
+		prefix = "comment"
+	case TokIllegal:
+		prefix = "illegal"
+	case TokBegArray:
+		return "<begin-array>"
+	case TokEndArray:
+		return "<end-array>"
+	case TokBegInline:
+		return "<begin-inline>"
+	case TokEndInline:
+		return "<end-inline>"
+	case TokBegRegularTable:
+		return "<begin-regular-table>"
+	case TokEndRegularTable:
+		return "<end-regular-table>"
+	case TokBegArrayTable:
+		return "<begin-array-table>"
+	case TokEndArrayTable:
+		return "<end-array-table>"
+	case TokEqual:
+		return "<equal>"
+	case TokDot:
+		return "<dot>"
+	case TokComma:
+		return "<comma>"
+	case TokNewline:
 		return "<newline>"
-	case Comment:
-		str = "comment"
-	case EOF:
-		str = "eof"
-	case Ident:
-		str = "ident"
-	case String:
-		str = "string"
-	case Integer:
-		str = "integer"
-	case Float:
-		str = "float"
-	case Bool:
-		str = "boolean"
-	case DateTime, Date, Time:
-		str = "datetime"
-	case Illegal:
-		str = "unknown"
-	default:
-		return fmt.Sprintf("<punct(%c)>", t.Type)
 	}
-	return fmt.Sprintf("<%s(%s)>", str, t.Literal)
-}
-
-func tokenString(r rune) string {
-	switch r {
-	default:
-		return "other"
-	case lcurly:
-		return "table"
-	case lsquare:
-		return "array"
-	case EOF:
-		return "eof"
-	case Ident:
-		return "ident"
-	case String:
-		return "string"
-	case Integer:
-		return "integer"
-	case Float:
-		return "float"
-	case Bool:
-		return "boolean"
-	case Date:
-		return "date"
-	case Time:
-		return "time"
-	case DateTime:
-		return "datetime"
-	case Illegal:
-		return "illegal"
-	case Comment:
-		return "comment"
-	}
+	return fmt.Sprintf("<%s(%s)>", prefix, t.Literal)
 }

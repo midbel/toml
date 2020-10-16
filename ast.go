@@ -11,7 +11,8 @@ type Node interface {
 }
 
 type Literal struct {
-	token Token
+	comment Token
+	token   Token
 }
 
 func (l *Literal) String() string {
@@ -23,8 +24,9 @@ func (l *Literal) Pos() Position {
 }
 
 type Option struct {
-	key   Token
-	value Node
+	comments []Token
+	key      Token
+	value    Node
 }
 
 func (o *Option) String() string {
@@ -80,8 +82,9 @@ func (t tableType) String() string {
 }
 
 type Table struct {
-	key  Token
-	kind tableType
+	comments []Token
+	key      Token
+	kind     tableType
 
 	nodes []Node
 }

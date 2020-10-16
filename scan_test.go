@@ -7,7 +7,7 @@ import (
 
 func TestScannerScan(t *testing.T) {
 	doc := `
-# comment
+# a comment #1
 
 "bool" = true
 "bool" = false
@@ -63,7 +63,7 @@ inline = {key = "foo", active = true, number = 100}
 `
 
 	tokens := []Token{
-		{Literal: "comment", Type: TokComment},
+		{Literal: "a comment #1", Type: TokComment},
 		{Literal: "bool", Type: TokString},
 		{Type: TokEqual},
 		{Literal: "true", Type: TokBool},
@@ -84,10 +84,10 @@ inline = {key = "foo", active = true, number = 100}
 		{Literal: "-100", Type: TokInteger},
 		{Literal: "underscore", Type: TokIdent},
 		{Type: TokEqual},
-		{Literal: "123_456", Type: TokInteger},
+		{Literal: "123456", Type: TokInteger},
 		{Literal: "hexa", Type: TokIdent},
 		{Type: TokEqual},
-		{Literal: "0xdead_beef", Type: TokInteger},
+		{Literal: "0xdeadbeef", Type: TokInteger},
 		{Literal: "octal", Type: TokIdent},
 		{Type: TokEqual},
 		{Literal: "0o1234567", Type: TokInteger},
@@ -105,13 +105,13 @@ inline = {key = "foo", active = true, number = 100}
 		{Literal: "1e16", Type: TokFloat},
 		{Literal: "float3", Type: TokIdent},
 		{Type: TokEqual},
-		{Literal: "3.14_15", Type: TokFloat},
+		{Literal: "3.1415", Type: TokFloat},
 		{Literal: "float4", Type: TokIdent},
 		{Type: TokEqual},
-		{Literal: "-1e16_185", Type: TokFloat},
+		{Literal: "-1e16185", Type: TokFloat},
 		{Literal: "float5", Type: TokIdent},
 		{Type: TokEqual},
-		{Literal: "3.14E1_987", Type: TokFloat},
+		{Literal: "3.14E1987", Type: TokFloat},
 		{Type: TokBegRegularTable},
 		{Literal: "strings", Type: TokIdent},
 		{Type: TokEndRegularTable},
@@ -218,6 +218,10 @@ inline = {key = "foo", active = true, number = 100}
 
 	var i int
 	for got := s.Scan(); got.Type != TokEOF; got = s.Scan() {
+		if i >= len(tokens) {
+			t.Fatalf("too many tokens! want %d, got %d", len(tokens), i)
+			break
+		}
 		if got.Type == TokIllegal {
 			t.Fatalf("<%s> illegal token found: %s", got.Pos, got)
 		}
@@ -226,10 +230,6 @@ inline = {key = "foo", active = true, number = 100}
 			t.Fatalf("<%s> unexpected token: want %s, got %s", got.Pos, want, got)
 		}
 		i++
-		if i >= len(tokens) {
-			t.Fatalf("too many tokens")
-			break
-		}
 	}
 	got := s.Scan()
 	if got.Type != TokEOF {

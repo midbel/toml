@@ -57,6 +57,8 @@ type Scanner struct {
 	line   int
 	column int
 
+	cursor Position
+
 	queue chan Token
 }
 
@@ -87,10 +89,18 @@ func (s *Scanner) Scan() Token {
 	return tok
 }
 
+func (s *Scanner) backup() {
+	s.cursor = Position{
+		Line:   s.line,
+		Column: s.column,
+	}
+}
+
 func (s *Scanner) scan() {
 	defer close(s.queue)
 	scan := scanDefault
 	for !s.isDone() {
+		s.backup()
 		scan = scan(s)
 		if scan == nil {
 			scan = scanDefault
@@ -157,6 +167,7 @@ func (s *Scanner) emit(kind rune) {
 	s.queue <- Token{
 		Literal: s.literal(),
 		Type:    kind,
+		Pos:     s.cursor,
 	}
 }
 
@@ -256,8 +267,7 @@ func scanArray(s *Scanner) {
 		s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
 		switch {
 		default:
-			scanIllegal(s)
-			return
+			scanValue(s)
 		case s.char == rsquare:
 			s.readRune()
 			s.emit(TokEndArray)
@@ -271,8 +281,6 @@ func scanArray(s *Scanner) {
 			s.emit(TokComma)
 		case s.char == lcurly:
 			scanInline(s)
-		case isDigit(s.char):
-			scanDecimal(s)
 		case isQuote(s.char):
 			scanString(s)
 		case isComment(s.char):
@@ -304,11 +312,14 @@ func scanInline(s *Scanner) {
 		case s.char == equal:
 			s.readRune()
 			s.emit(TokEqual)
+			s.skip(isBlank)
 			scanValue(s)
 		case isLetter(s.char):
 			scanIdent(s)
 		case isDigit(s.char):
 			scanDigit(s)
+		case isQuote(s.char):
+			scanString(s)
 		case isComment(s.char):
 			scanComment(s)
 		}
@@ -346,7 +357,8 @@ func scanString(s *Scanner) {
 			case 0:
 				continue
 			default:
-				s.char = char
+				s.writeRune(char)
+				continue
 			}
 		}
 		s.writeRune(s.char)
@@ -363,6 +375,7 @@ func scanEscape(s *Scanner, multi bool) rune {
 	s.readRune()
 	if multi && s.char == newline {
 		s.readRune()
+		s.skip(isBlank)
 		return 0
 	}
 	if s.char == 'u' || s.char == 'U' {
@@ -443,12 +456,18 @@ func scanBase(s *Scanner) {
 func scanDecimal(s *Scanner) {
 	kind := TokInteger
 	if isSign(s.char) {
-		s.writeRune(s.char)
+		if s.char == minus {
+			s.writeRune(s.char)
+		}
 		s.readRune()
 	}
-	if s.char == '0' && isDigit(s.nextRune()) {
-		s.emit(TokIllegal)
-		return
+	if s.char == zero && isDigit(s.nextRune()) {
+		s.readRune()
+		if isDigit(s.char) && s.nextRune() != colon {
+			s.emit(TokIllegal)
+			return
+		}
+		s.writeRune(zero)
 	}
 Loop:
 	for !s.isDone() {
@@ -657,6 +676,7 @@ func scanDigit(s *Scanner) {
 }
 
 func scanComment(s *Scanner) {
+	s.readRune()
 	s.skip(isBlank)
 	scanWhile(s, TokComment, func(r rune) bool { return !isNL(r) })
 }
