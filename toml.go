@@ -153,20 +153,20 @@ func decodeLiteral(i *Literal, e reflect.Value) error {
 	switch str := i.token.Literal; i.token.Type {
 	default:
 		err = fmt.Errorf("literal: unexpected token type: %s", i.token)
-	case String:
+	case TokString:
 		err = decodeString(e, str)
-	case Bool:
+	case TokBool:
 		err = decodeBool(e, str)
-	case Integer:
+	case TokInteger:
 		err = decodeInt(e, str)
-	case Float:
+	case TokFloat:
 		err = decodeFloat(e, str)
-	case DateTime:
+	case TokDatetime:
 		patterns := makePatterns([]string{dtFormat1, dtFormat2})
 		err = decodeTime(e, str, patterns)
-	case Date:
+	case TokDate:
 		err = decodeTime(e, str, []string{dateFormat})
-	case Time:
+	case TokTime:
 		// err = decodeTime(e, str)
 	}
 	return err

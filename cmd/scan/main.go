@@ -18,12 +18,12 @@ func main() {
 	}
 	defer r.Close()
 
-	sc, err := toml.Scan(r)
+	s, err := toml.NewScanner(r)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(3)
 	}
-	for k := sc.Scan(); k.Type != toml.EOF; k = sc.Scan() {
+	for k := s.Scan(); k.Type != toml.TokEOF; k = s.Scan() {
 		fmt.Println(k)
 	}
 }
