@@ -172,8 +172,12 @@ func (s *Scanner) emit(kind rune) {
 }
 
 func scanDefault(s *Scanner) ScanFunc {
-	s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
+	// s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
+	s.skip(isBlank)
 	switch {
+	case s.char == newline:
+		s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
+		s.emit(TokNL)
 	case s.char == lsquare:
 		s.readRune()
 		k := TokBegRegularTable
@@ -190,7 +194,7 @@ func scanDefault(s *Scanner) ScanFunc {
 			k = TokEndArrayTable
 		}
 		s.skip(isBlank)
-		if s.char != pound && s.char != newline {
+		if !isComment(s.char) && !isNL(s.char) {
 			k = TokIllegal
 		}
 		s.emit(k)
@@ -209,8 +213,6 @@ func scanDefault(s *Scanner) ScanFunc {
 		scanIdent(s)
 	case isComment(s.char):
 		scanComment(s)
-	case isEOF(s.char):
-		s.emit(TokEOF)
 	default:
 		scanIllegal(s)
 	}
@@ -238,7 +240,7 @@ func scanValue(s *Scanner) ScanFunc {
 		scanIllegal(s)
 	}
 	s.skip(isBlank)
-	if isAlpha(s.char) {
+	if isAlpha(s.char) || isQuote(s.char) {
 		scanIllegal(s)
 	}
 	return nil
@@ -279,8 +281,6 @@ func scanArray(s *Scanner) {
 		case s.char == comma:
 			s.readRune()
 			s.emit(TokComma)
-		case s.char == lcurly:
-			scanInline(s)
 		case isQuote(s.char):
 			scanString(s)
 		case isComment(s.char):
@@ -302,10 +302,6 @@ func scanInline(s *Scanner) {
 			s.readRune()
 			s.emit(TokEndInline)
 			return
-		case s.char == lsquare:
-			scanArray(s)
-		case s.char == lcurly:
-			scanInline(s)
 		case s.char == comma:
 			s.readRune()
 			s.emit(TokComma)
@@ -360,6 +356,7 @@ func scanString(s *Scanner) {
 				s.writeRune(char)
 				continue
 			}
+			continue
 		}
 		s.writeRune(s.char)
 		s.readRune()
@@ -415,6 +412,7 @@ func scanUnicodeEscape(s *Scanner) rune {
 		char |= x << offset
 		offset -= step
 	}
+	s.readRune()
 	return char
 }
 
@@ -727,10 +725,6 @@ func isBlank(r rune) bool {
 
 func isNL(r rune) bool {
 	return r == newline
-}
-
-func isWhitespace(r rune) bool {
-	return isBlank(r) || isNL(r)
 }
 
 func isEOF(r rune) bool {

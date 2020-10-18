@@ -67,6 +67,10 @@ type Token struct {
 	Pos     Position
 }
 
+func (t Token) isZero() bool {
+	return t.Literal == "" && t.Type == 0
+}
+
 func (t Token) isComment() bool {
 	return t.Type == TokComment
 }
