@@ -8,6 +8,8 @@ import (
 type Node interface {
 	Pos() Position
 	fmt.Stringer
+
+	withComment(string, string)
 }
 
 type comment struct {
@@ -15,12 +17,9 @@ type comment struct {
 	post string
 }
 
-func (c *comment) setPre(str string) {
-	c.pre = str
-}
-
-func (c *comment) setPost(str string) {
-	c.post = str
+func (c *comment) withComment(pre, post string) {
+	c.pre = pre
+	c.post = post
 }
 
 type Option struct {

@@ -49,10 +49,12 @@ func dumpLiteral(n Node) string {
 		var b strings.Builder
 		b.WriteString("array")
 		b.WriteRune(lsquare)
-		for _, n := range x.nodes {
+		for i, n := range x.nodes {
+			if i > 0 {
+				b.WriteRune(comma)
+				b.WriteRune(space)
+			}
 			b.WriteString(dumpLiteral(n))
-			b.WriteRune(comma)
-			b.WriteRune(space)
 		}
 		b.WriteRune(rsquare)
 		return b.String()

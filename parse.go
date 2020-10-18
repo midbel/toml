@@ -74,16 +74,17 @@ Loop:
 				return err
 			}
 			t = x
-			t.setPre(p.comment.String())
 			if t.kind == tableItem && p.peek.Type != TokEndArrayTable {
 				return p.unexpectedToken("']'", "table")
 			}
 			p.next()
 			p.next()
+			var comment string
 			if p.curr.isComment() {
-				t.setPost(p.curr.Literal)
+				comment = p.curr.Literal
 				p.next()
 			}
+			t.withComment(p.comment.String(), comment)
 			break Loop
 		default:
 			return p.unexpectedToken("'], .'", "table")
@@ -98,7 +99,7 @@ Loop:
 }
 
 func (p *Parser) parseOptions(t *Table) error {
-	for !p.isDone() {
+	for {
 		p.parseComment()
 		if p.curr.isTable() || p.isDone() {
 			break
@@ -148,10 +149,12 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		opt.value, err = p.parseLiteral()
 		p.next()
 	}
+	var comment string
 	if p.curr.isComment() {
-		opt.setPost(p.curr.Literal)
+		comment = p.curr.Literal
 		p.next()
 	}
+	opt.withComment(p.comment.String(), comment)
 	if err == nil {
 		err = t.registerOption(&opt)
 	}
@@ -196,9 +199,12 @@ func (p *Parser) parseArray() (Node, error) {
 		case TokEndArray:
 		case TokComma:
 			p.next()
+			var comment string
 			if p.curr.isComment() {
+				comment = p.curr.Literal
 				p.next()
 			}
+			node.withComment(p.comment.String(), comment)
 			if p.curr.isNL() {
 				p.next()
 			}
@@ -241,9 +247,11 @@ func (p *Parser) parseInline() (Node, error) {
 
 func (p *Parser) parseComment() {
 	p.comment.Reset()
-	for p.curr.isComment() {
+	for i := 0; p.curr.isComment(); i++ {
+		if i > 0 {
+			p.comment.WriteRune(newline)
+		}
 		p.comment.WriteString(p.curr.Literal)
-		p.comment.WriteRune(newline)
 		p.next()
 		if p.curr.Type == TokNL {
 			p.next()
