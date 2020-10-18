@@ -1,12 +1,21 @@
 package    = "toml"
 version    = "1.0.0"
 repository = "https://github.com/midbel/toml"
-provides   = ["toml", "tomllint"]
-revision   = 18
+provides   = ["toml", "tomllint"] # other command to be added later
+revision   = 18 # not sure of the revision number
 
-[dev]
+[dev] # a comment
 name  = "midbel"
 email = "noreply@midbel.org"
+roles = [
+  {user = "admin", role = ["user", "admin"]}, # admin account
+  {user = "guest1", role = ["guest"]}, # guest #0 account
+  {user = "guest2", role = ["guest"]}, # guest #1 account
+]
+keys = [
+  ["key0", 123212, 45332112], # keys first half
+  ["key1", 45355251, 774848732], # keys second half
+]
 
   [[dev.project]]
   repository = "https://github.com/midbel/glob"
