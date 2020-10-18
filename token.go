@@ -76,6 +76,10 @@ func (t Token) isComment() bool {
 	return t.Type == TokComment
 }
 
+func (t Token) isNL() bool {
+	return t.Type == TokNL
+}
+
 func (t Token) isTable() bool {
 	return t.Type == TokBegRegularTable || t.Type == TokBegArrayTable
 }

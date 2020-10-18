@@ -1,6 +1,7 @@
 package toml
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 )
@@ -9,6 +10,8 @@ type Parser struct {
 	scan *Scanner
 	peek Token
 	curr Token
+
+	comment bytes.Buffer
 }
 
 func Parse(r io.Reader) (Node, error) {
@@ -29,7 +32,6 @@ func (p *Parser) Parse() (Node, error) {
 		key:  Token{Literal: "default", Type: TokIdent},
 		kind: tableRegular,
 	}
-
 	if err := p.parseOptions(&t); err != nil {
 		return nil, err
 	}
@@ -72,27 +74,40 @@ Loop:
 				return err
 			}
 			t = x
+			t.setPre(p.comment.String())
 			if t.kind == tableItem && p.peek.Type != TokEndArrayTable {
 				return p.unexpectedToken("']'", "table")
 			}
 			p.next()
 			p.next()
+			if p.curr.isComment() {
+				t.setPost(p.curr.Literal)
+				p.next()
+			}
 			break Loop
 		default:
 			return p.unexpectedToken("'], .'", "table")
 		}
 		p.next()
 	}
+	if !p.curr.isNL() {
+		return p.unexpectedToken("'\\n'", "table")
+	}
+	p.next()
 	return p.parseOptions(t)
 }
 
 func (p *Parser) parseOptions(t *Table) error {
 	for !p.isDone() {
-		if p.curr.isTable() {
+		p.parseComment()
+		if p.curr.isTable() || p.isDone() {
 			break
 		}
 		if err := p.parseOption(t, true); err != nil {
 			return err
+		}
+		if !p.curr.isNL() {
+			return p.unexpectedToken("'\\n'", "body")
 		}
 		p.next()
 	}
@@ -106,10 +121,7 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 	if !p.curr.IsIdent() {
 		return p.unexpectedToken("ident", "option")
 	}
-	if p.peek.Type == TokDot {
-		if !dotted {
-			return fmt.Errorf("dot not allow")
-		}
+	if p.peek.Type == TokDot && dotted {
 		x, err := t.retrieveTable(p.curr)
 		if err != nil {
 			return err
@@ -134,6 +146,11 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		opt.value, err = p.parseInline()
 	default:
 		opt.value, err = p.parseLiteral()
+		p.next()
+	}
+	if p.curr.isComment() {
+		opt.setPost(p.curr.Literal)
+		p.next()
 	}
 	if err == nil {
 		err = t.registerOption(&opt)
@@ -155,14 +172,12 @@ func (p *Parser) parseArray() (Node, error) {
 	p.next()
 
 	a := Array{pos: p.curr.Pos}
-	for !p.isDone() {
-		if p.curr.Type == TokEndArray {
-			break
-		}
+	for !p.isDone() && p.curr.Type != TokEndArray {
 		var (
 			node Node
 			err  error
 		)
+		p.parseComment()
 		switch p.curr.Type {
 		case TokBegArray:
 			node, err = p.parseArray()
@@ -170,17 +185,23 @@ func (p *Parser) parseArray() (Node, error) {
 			node, err = p.parseInline()
 		default:
 			node, err = p.parseLiteral()
+			p.next()
 		}
 		if err != nil {
 			return nil, err
 		}
 		a.Append(node)
 
-		p.next()
 		switch p.curr.Type {
 		case TokEndArray:
 		case TokComma:
 			p.next()
+			if p.curr.isComment() {
+				p.next()
+			}
+			if p.curr.isNL() {
+				p.next()
+			}
 		default:
 			return nil, p.unexpectedToken("','", "array")
 		}
@@ -188,6 +209,7 @@ func (p *Parser) parseArray() (Node, error) {
 	if p.curr.Type != TokEndArray {
 		return nil, p.unexpectedToken("']'", "array")
 	}
+	p.next()
 	return &a, nil
 }
 
@@ -198,29 +220,35 @@ func (p *Parser) parseInline() (Node, error) {
 		key:  Token{Pos: p.curr.Pos},
 		kind: tableInline,
 	}
-	for !p.isDone() {
-		if p.curr.Type == TokEndInline {
-			break
-		}
+	for !p.isDone() && p.curr.Type != TokEndInline {
 		if err := p.parseOption(&t, false); err != nil {
 			return nil, err
 		}
-		p.next()
-		if p.curr.Type == TokEndInline {
-			break
+		switch p.curr.Type {
+		case TokComma:
+			p.next()
+		case TokEndInline:
+		default:
+			return nil, p.unexpectedToken("',, }'", "inline")
 		}
-		if p.curr.Type != TokComma {
-			return nil, p.unexpectedToken("','", "inline")
-		}
-		if p.peek.Type == TokEndInline {
-			return nil, p.unexpectedToken("ident", "inline")
-		}
-		p.next()
 	}
 	if p.curr.Type != TokEndInline {
 		return nil, p.unexpectedToken("'}'", "inline")
 	}
+	p.next()
 	return &t, nil
+}
+
+func (p *Parser) parseComment() {
+	p.comment.Reset()
+	for p.curr.isComment() {
+		p.comment.WriteString(p.curr.Literal)
+		p.comment.WriteRune(newline)
+		p.next()
+		if p.curr.Type == TokNL {
+			p.next()
+		}
+	}
 }
 
 func (p *Parser) next() {
@@ -229,11 +257,6 @@ func (p *Parser) next() {
 	}
 	p.curr = p.peek
 	p.peek = p.scan.Scan()
-
-	for p.curr.isComment() {
-		p.curr = p.peek
-		p.peek = p.scan.Scan()
-	}
 }
 
 func (p *Parser) isDone() bool {
@@ -241,5 +264,5 @@ func (p *Parser) isDone() bool {
 }
 
 func (p *Parser) unexpectedToken(want, ctx string) error {
-	return fmt.Errorf("[%s] %s: unexpected token %s (want: %s)", ctx, p.curr.Pos, p.curr, want)
+	return fmt.Errorf("%s [%s]: unexpected token %s (want: %s)", p.curr.Pos, ctx, p.curr, want)
 }

@@ -10,23 +10,23 @@ type Node interface {
 	fmt.Stringer
 }
 
-type Literal struct {
-	comment Token
-	token   Token
+type comment struct {
+	pre  string
+	post string
 }
 
-func (l *Literal) String() string {
-	return l.token.Literal
+func (c *comment) setPre(str string) {
+	c.pre = str
 }
 
-func (l *Literal) Pos() Position {
-	return l.token.Pos
+func (c *comment) setPost(str string) {
+	c.post = str
 }
 
 type Option struct {
-	comments []Token
-	key      Token
-	value    Node
+	comment
+	key   Token
+	value Node
 }
 
 func (o *Option) String() string {
@@ -37,7 +37,21 @@ func (o *Option) Pos() Position {
 	return o.key.Pos
 }
 
+type Literal struct {
+	comment
+	token Token
+}
+
+func (l *Literal) String() string {
+	return l.token.Literal
+}
+
+func (l *Literal) Pos() Position {
+	return l.token.Pos
+}
+
 type Array struct {
+	comment
 	pos   Position
 	nodes []Node
 }
@@ -82,9 +96,9 @@ func (t tableType) String() string {
 }
 
 type Table struct {
-	comments []Token
-	key      Token
-	kind     tableType
+	comment
+	key  Token
+	kind tableType
 
 	nodes []Node
 }
