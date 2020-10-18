@@ -6,6 +6,7 @@ import (
 
 const (
 	TokEOF rune = -(iota) + 1
+	TokNL
 	TokIdent
 	TokString
 	TokInteger
@@ -116,6 +117,8 @@ func (t Token) String() string {
 		prefix = "unknown"
 	case TokEOF:
 		return "<eof>"
+	case TokNL:
+		return "<nl>"
 	case TokIdent:
 		prefix = "ident"
 	case TokString:
