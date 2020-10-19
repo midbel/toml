@@ -1,12 +1,15 @@
 package toml
 
 import (
+  "bufio"
 	"fmt"
 	"io"
 	"strings"
 )
 
 func Format(r io.Reader, w io.Writer) error {
+  ws := bufio.NewWriter(w)
+  defer ws.Flush()
 	doc, err := Parse(r)
 	if err != nil {
 		return err
@@ -15,7 +18,7 @@ func Format(r io.Reader, w io.Writer) error {
 	if !ok {
 		return fmt.Errorf("document not parsed properly")
 	}
-	return formatTable(t, nil, w)
+	return formatTable(t, nil, ws)
 }
 
 func formatTable(t *Table, parents []string, w io.Writer) error {
@@ -43,11 +46,7 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 	if t.isRoot() {
 		return nil
 	}
-	if t.comment.pre != "" {
-		for _, str := range strings.Split(t.comment.pre, "\n") {
-			fmt.Fprintf(w, "# %s\n", str)
-		}
-	}
+  formatComment(t.comment.pre, "\n", w)
 	var pattern string
 	switch t.kind {
 	case tableRegular:
@@ -60,9 +59,7 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 		parents = append(parents, t.key.Literal)
 	}
 	fmt.Fprintf(w, pattern, strings.Join(parents, "."))
-	if t.comment.post != "" {
-		fmt.Fprintf(w, " # %s", t.comment.post)
-	}
+  formatComment(t.comment.post, "", w)
 	fmt.Fprintln(w)
 	return nil
 }
@@ -70,20 +67,14 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 func formatOptions(options []*Option, w io.Writer) error {
 	length := longestKey(options)
 	for _, o := range options {
-		if o.comment.pre != "" {
-			for _, str := range strings.Split(o.comment.pre, "\n") {
-				fmt.Fprintf(w, "# %s\n", str)
-			}
-		}
+    formatComment(o.comment.pre, "\n", w)
 		if _, err := fmt.Fprintf(w, "%-*s = ", length, o.key.Literal); err != nil {
 			return err
 		}
 		if err := formatValue(o.value, w); err != nil {
 			return err
 		}
-		if o.comment.post != "" {
-			fmt.Fprintf(w, " # %s", o.comment.post)
-		}
+    formatComment(o.comment.post, "", w)
 		fmt.Fprintln(w)
 	}
 	return nil
@@ -124,12 +115,51 @@ func formatInline(t *Table, w io.Writer) {
 }
 
 func formatArray(a *Array, w io.Writer) {
+	retr := func(n Node) comment {
+		var c comment
+		switch n := n.(type) {
+		case *Literal:
+			c = n.comment
+		case *Array:
+			c = n.comment
+		case *Table:
+			c = n.comment
+		}
+		return c
+	}
+	multi := a.isMultiline()
 	fmt.Fprint(w, "[")
-	for _, n := range a.nodes {
+	for i, n := range a.nodes {
+		if multi {
+			fmt.Fprint(w, "\n\t")
+		} else if !multi && i > 0 {
+      fmt.Fprint(w, " ")
+    }
+		com := retr(n)
+    formatComment(com.pre, "\n\t", w)
 		formatValue(n, w)
-		fmt.Fprint(w, ", ")
+		if i < len(a.nodes)-1 || multi {
+			fmt.Fprint(w, ",")
+		}
+    formatComment(com.post, "", w)
+	}
+	if multi {
+		fmt.Fprintln(w)
 	}
 	fmt.Fprint(w, "]")
+}
+
+func formatComment(comment, eol string, w io.Writer) {
+  if comment == "" {
+    return
+  }
+  s := bufio.NewScanner(strings.NewReader(comment))
+  for s.Scan() {
+    fmt.Fprintf(w, " # %s", s.Text())
+    if eol != "" {
+      fmt.Fprint(w, eol)
+    }
+  }
 }
 
 func longestKey(options []*Option) int {

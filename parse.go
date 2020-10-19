@@ -178,8 +178,11 @@ func (p *Parser) parseArray() (Node, error) {
 		var (
 			node Node
 			err  error
+			pre  string
+			post string
 		)
 		p.parseComment()
+		pre = p.comment.String()
 		switch p.curr.Type {
 		case TokBegArray:
 			node, err = p.parseArray()
@@ -198,17 +201,17 @@ func (p *Parser) parseArray() (Node, error) {
 		case TokEndArray:
 		case TokComma:
 			p.next()
-			var comment string
-			if p.curr.isComment() {
-				comment = p.curr.Literal
-				p.next()
-			}
-			node.withComment(p.comment.String(), comment)
-			if p.curr.isNL() {
-				p.next()
-			}
+		case TokComment:
 		default:
 			return nil, p.unexpectedToken("','", "array")
+		}
+		if p.curr.isComment() {
+			post = p.curr.Literal
+			p.next()
+		}
+		node.withComment(pre, post)
+		if p.curr.isNL() {
+			p.next()
 		}
 	}
 	if p.curr.Type != TokEndArray {

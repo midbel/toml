@@ -10,9 +10,13 @@ revision   = 18 # not sure of the revision number
 name  = "midbel"
 email = "noreply@midbel.org"
 roles = [
+  # comment before admin
+  # an admin is like root but without super power
   {user = "admin", role = ["user", "admin"]}, # admin account
+  # comment before guests
   {user = "guest1", role = ["guest"]}, # guest #0 account
   {user = "guest2", role = ["guest"]}, # guest #1 account
+  {user = "guest3", role = ["guest"]} # guest #2 account
 ]
 keys = [
   ["key0", 123212, 45332112], # keys first half

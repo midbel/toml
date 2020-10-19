@@ -162,10 +162,7 @@ func (s *Scanner) isDone() bool {
 }
 
 func (s *Scanner) emit(kind rune) {
-	defer func() {
-		s.buf.Reset()
-		s.backup()
-	}()
+	defer s.buf.Reset()
 	s.queue <- Token{
 		Literal: s.literal(),
 		Type:    kind,
@@ -175,6 +172,7 @@ func (s *Scanner) emit(kind rune) {
 
 func scanDefault(s *Scanner) ScanFunc {
 	s.skip(isBlank)
+	s.backup()
 	switch {
 	case s.char == newline:
 		s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
@@ -222,6 +220,7 @@ func scanDefault(s *Scanner) ScanFunc {
 
 func scanValue(s *Scanner) ScanFunc {
 	s.skip(isBlank)
+	s.backup()
 	switch {
 	case s.char == lsquare:
 		scanArray(s)
@@ -268,6 +267,7 @@ func scanArray(s *Scanner) {
 	s.readRune()
 	for !s.isDone() {
 		s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
+		s.backup()
 		switch {
 		default:
 			scanValue(s)
