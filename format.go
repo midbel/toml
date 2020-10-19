@@ -2,119 +2,225 @@ package toml
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"strconv"
 	"strings"
 )
 
-func Format(r io.Reader, w io.Writer) error {
-	ws := bufio.NewWriter(w)
-	defer ws.Flush()
-	doc, err := Parse(r)
-	if err != nil {
-		return err
+type FormatRule func(*Formatter) error
+
+func WithTab(tab int) FormatRule {
+	return func(ft *Formatter) error {
+		if tab >= 1 {
+			ft.withTab = strings.Repeat(" ", tab)
+		}
+		return nil
 	}
-	t, ok := doc.(*Table)
+}
+
+func WithEmpty(with bool) FormatRule {
+	return func(ft *Formatter) error {
+		ft.withEmpty = with
+		return nil
+	}
+}
+
+func WithNest(with bool) FormatRule {
+	return func(ft *Formatter) error {
+		ft.withNest = with
+		return nil
+	}
+}
+
+func WithComment(with bool) FormatRule {
+	return func(ft *Formatter) error {
+		ft.withComment = with
+		return nil
+	}
+}
+
+func WithFloat(format string) FormatRule {
+	return func(ft *Formatter) error {
+		var spec byte
+		switch strings.ToLower(format) {
+		case "e":
+			spec = 'e'
+		case "", "f":
+			spec = 'f'
+		case "g":
+			spec = 'g'
+		default:
+			return fmt.Errorf("%s: unsupported specifier", format)
+		}
+		ft.floatconv = formatFloat(spec)
+		return nil
+	}
+}
+
+func WithNumber(format string) FormatRule {
+	return func(ft *Formatter) error {
+		var (
+			base   int
+			prefix string
+		)
+		switch strings.ToLower(format) {
+		case "x":
+			base, prefix = 16, "0x"
+		case "o":
+			base, prefix = 8, "0o"
+		case "b":
+			base, prefix = 2, "0b"
+		case "", "d":
+			base = 10
+		default:
+			return fmt.Errorf("%s: unsupported base", format)
+		}
+		ft.intconv = formatInteger(base, prefix)
+		return nil
+	}
+}
+
+func WithTime(utc bool, millis int) FormatRule {
+	return func(ft *Formatter) error {
+		return nil
+	}
+}
+
+type Formatter struct {
+	doc    Node
+	level  int
+	writer *bufio.Writer
+
+	floatconv func(string) (string, error)
+	intconv   func(string) (string, error)
+	timeconv  func(string) (string, error)
+
+	withTab     string
+	withEmpty   bool
+	withNest    bool
+	withComment bool
+}
+
+func NewFormatter(doc string, rules ...FormatRule) (Formatter, error) {
+	identity := func(str string) (string, error) {
+		return str, nil
+	}
+	f := Formatter{
+		floatconv:   identity,
+		intconv:     identity,
+		timeconv:    identity,
+		withTab:     "\t",
+		withEmpty:   false,
+		withNest:    false,
+		withComment: true,
+	}
+
+	buf, err := ioutil.ReadFile(doc)
+	if err != nil {
+		return f, err
+	}
+	f.doc, err = Parse(bytes.NewReader(buf))
+	if err != nil {
+		return f, err
+	}
+	for _, rfn := range rules {
+		if err := rfn(&f); err != nil {
+			return f, err
+		}
+	}
+	return f, nil
+}
+
+func (f Formatter) Format(w io.Writer) error {
+	f.writer = bufio.NewWriter(w)
+	root, ok := f.doc.(*Table)
 	if !ok {
 		return fmt.Errorf("document not parsed properly")
 	}
-	return formatTable(t, nil, ws)
+	if err := f.formatTable(root, nil); err != nil {
+		return err
+	}
+	return f.writer.Flush()
 }
 
-func formatTable(t *Table, parents []string, w io.Writer) error {
-	options := t.listOptions()
-	if len(options) > 0 {
-		formatHeader(t, parents, w)
-		err := formatOptions(options, w)
+func (f Formatter) formatTable(curr *Table, paths []string) error {
+	options := curr.listOptions()
+	if f.withEmpty || len(options) > 0 {
+		f.formatHeader(curr, paths)
+		err := f.formatOptions(options)
 		if err != nil {
 			return nil
 		}
-		fmt.Fprintln(w)
+		fmt.Fprintln(f.writer)
 	}
-	if !t.isRoot() && t.kind.isContainer() {
-		parents = append(parents, t.key.Literal)
+	if !curr.isRoot() && curr.kind.isContainer() {
+		paths = append(paths, curr.key.Literal)
 	}
-	for _, t := range t.listTables() {
-		if err := formatTable(t, parents, w); err != nil {
+	for _, next := range curr.listTables() {
+		if err := f.formatTable(next, paths); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func formatHeader(t *Table, parents []string, w io.Writer) error {
-	if t.isRoot() {
-		return nil
-	}
-	formatComment(t.comment.pre, "\n", true, w)
-	var pattern string
-	switch t.kind {
-	case tableRegular:
-		pattern = "[%s]"
-	case tableArray:
-	case tableItem:
-		pattern = "[[%s]]"
-	}
-	if t.kind != tableItem {
-		parents = append(parents, t.key.Literal)
-	}
-	fmt.Fprintf(w, pattern, strings.Join(parents, "."))
-	formatComment(t.comment.post, "", false, w)
-	fmt.Fprintln(w)
-	return nil
-}
-
-func formatOptions(options []*Option, w io.Writer) error {
+func (f Formatter) formatOptions(options []*Option) error {
 	length := longestKey(options)
 	for _, o := range options {
-		formatComment(o.comment.pre, "\n", true, w)
-		if _, err := fmt.Fprintf(w, "%-*s = ", length, o.key.Literal); err != nil {
+		f.formatComment(o.comment.pre, "\n", true)
+		if _, err := fmt.Fprintf(f.writer, "%-*s = ", length, o.key.Literal); err != nil {
 			return err
 		}
-		if err := formatValue(o.value, w); err != nil {
+		if err := f.formatValue(o.value); err != nil {
 			return err
 		}
-		formatComment(o.comment.post, "", false, w)
-		fmt.Fprintln(w)
+		f.formatComment(o.comment.post, "", false)
+		fmt.Fprintln(f.writer)
 	}
 	return nil
 }
 
-func formatValue(n Node, w io.Writer) error {
+func (f Formatter) formatValue(n Node) error {
 	if n == nil {
 		return nil
 	}
 	var err error
 	switch n := n.(type) {
 	case *Literal:
-		pattern := "%s"
+		pat := "%s"
 		if n.token.Type == TokString {
-			pattern = "\"%s\""
+			pat = "\"%s\""
 		}
-		fmt.Fprintf(w, pattern, n.token.Literal)
+		str, err := f.convertValue(n.token)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f.writer, pat, str)
 	case *Array:
-		formatArray(n, w)
+		err = f.formatArray(n)
 	case *Table:
-		formatInline(n, w)
+		err = f.formatInline(n)
 	default:
 		err = fmt.Errorf("unexpected value type %T", n)
 	}
 	return err
 }
 
-func formatInline(t *Table, w io.Writer) {
-	fmt.Fprint(w, "{")
-	for i, o := range t.listOptions() {
-		if i > 0 {
-			fmt.Fprint(w, ", ")
-		}
-		fmt.Fprintf(w, "%s = ", o.key.Literal)
-		formatValue(o.value, w)
+func (f Formatter) convertValue(tok Token) (string, error) {
+	switch tok.Type {
+	default:
+		return tok.Literal, nil
+	case TokInteger:
+		return f.intconv(tok.Literal)
+	case TokFloat:
+		return f.floatconv(tok.Literal)
 	}
-	fmt.Fprint(w, "}")
 }
 
-func formatArray(a *Array, w io.Writer) {
+func (f Formatter) formatArray(a *Array) error {
 	retr := func(n Node) comment {
 		var c comment
 		switch n := n.(type) {
@@ -128,44 +234,85 @@ func formatArray(a *Array, w io.Writer) {
 		return c
 	}
 	multi := a.isMultiline()
-	fmt.Fprint(w, "[")
+	fmt.Fprint(f.writer, "[")
 	for i, n := range a.nodes {
 		if multi {
-			fmt.Fprint(w, "\n\t")
+			fmt.Fprint(f.writer, "\n\t")
 		} else if !multi && i > 0 {
-			fmt.Fprint(w, " ")
+			fmt.Fprint(f.writer, " ")
 		}
 		com := retr(n)
-		formatComment(com.pre, "\n\t", true, w)
-		formatValue(n, w)
-		if i < len(a.nodes)-1 || multi {
-			fmt.Fprint(w, ",")
+		f.formatComment(com.pre, "\n\t", true)
+		if err := f.formatValue(n); err != nil {
+			return err
 		}
-		formatComment(com.post, "", false, w)
+		if i < len(a.nodes)-1 || multi {
+			fmt.Fprint(f.writer, ",")
+		}
+		f.formatComment(com.post, "", false)
 	}
 	if multi {
-		fmt.Fprintln(w)
+		fmt.Fprintln(f.writer)
 	}
-	fmt.Fprint(w, "]")
+	fmt.Fprint(f.writer, "]")
+	return nil
 }
 
-func formatComment(comment, eol string, pre bool, w io.Writer) {
-	if comment == "" {
-		return
-	}
-  var (
-    scan = bufio.NewScanner(strings.NewReader(comment))
-    pat = " # %s"
-  )
-  if pre {
-    pat = strings.TrimSpace(pat)
-  }
-	for scan.Scan() {
-		fmt.Fprintf(w, pat, scan.Text())
-		if eol != "" {
-			fmt.Fprint(w, eol)
+func (f Formatter) formatInline(t *Table) error {
+	fmt.Fprint(f.writer, "{")
+	for i, o := range t.listOptions() {
+		if i > 0 {
+			fmt.Fprint(f.writer, ", ")
+		}
+		fmt.Fprintf(f.writer, "%s = ", o.key.Literal)
+		if err := f.formatValue(o.value); err != nil {
+			return err
 		}
 	}
+	fmt.Fprint(f.writer, "}")
+	return nil
+}
+
+func (f Formatter) formatHeader(curr *Table, paths []string) error {
+	if curr.isRoot() {
+		return nil
+	}
+	var pat string
+	switch curr.kind {
+	case tableRegular:
+		pat = "[%s]"
+	case tableArray:
+	case tableItem:
+		pat = "[[%s]]"
+	}
+	if curr.kind != tableItem {
+		paths = append(paths, curr.key.Literal)
+	}
+	f.formatComment(curr.comment.pre, "\n", true)
+	fmt.Fprintf(f.writer, pat, strings.Join(paths, "."))
+	f.formatComment(curr.comment.post, "", false)
+	fmt.Fprintln(f.writer)
+	return nil
+}
+
+func (f Formatter) formatComment(comment, eol string, pre bool) error {
+	if !f.withComment || comment == "" {
+		return nil
+	}
+	var (
+		scan = bufio.NewScanner(strings.NewReader(comment))
+		pat  = " # %s"
+	)
+	if pre {
+		pat = strings.TrimSpace(pat)
+	}
+	for scan.Scan() {
+		fmt.Fprintf(f.writer, pat, scan.Text())
+		if eol != "" {
+			fmt.Fprint(f.writer, eol)
+		}
+	}
+	return nil
 }
 
 func longestKey(options []*Option) int {
@@ -177,4 +324,25 @@ func longestKey(options []*Option) int {
 		}
 	}
 	return length
+}
+
+func formatFloat(specifier byte) func(string) (string, error) {
+	return func(str string) (string, error) {
+		f, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatFloat(f, specifier, -1, 64), nil
+	}
+}
+
+func formatInteger(base int, prefix string) func(string) (string, error) {
+	return func(str string) (string, error) {
+		n, err := strconv.ParseInt(str, 0, 64)
+		if err != nil {
+			return "", err
+		}
+		str = strconv.FormatInt(n, base)
+		return prefix + str, nil
+	}
 }

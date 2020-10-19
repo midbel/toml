@@ -18,10 +18,6 @@ roles = [
   {user = "guest2", role = ["guest"]}, # guest #1 account
   {user = "guest3", role = ["guest"]} # guest #2 account
 ]
-keys = [
-  ["key0", 123212, 45332112], # keys first half
-  ["key1", 45355251, 774848732], # keys second half
-]
 
   [[dev.project]]
   repository = "https://github.com/midbel/glob"
