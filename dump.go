@@ -11,37 +11,38 @@ func Dump(n Node) {
 }
 
 func dumpNode(n Node, level int) {
+	space := strings.Repeat(" ", level*2)
 	switch x := n.(type) {
 	case *Option:
-		value := dumpLiteral(x.value)
-		fmt.Printf("%soption(pos: %s, key: %s, value: %s),", strings.Repeat(" ", level*2), x.Pos(), x.key.Literal, value)
+		value := dumpLiteral(x.value, level+2)
+		fmt.Printf("%soption(pos: %s, key: %s, value: %s),", space, x.Pos(), x.key.Literal, value)
 		fmt.Println()
 	case *Table:
 		if x.kind == tableArray {
-			fmt.Printf("%sarray{", strings.Repeat(" ", level*2))
+			fmt.Printf("%sarray{", space)
 			fmt.Println()
 			for _, n := range sortNodes(x.nodes) {
 				dumpNode(n, level+2)
 			}
-			fmt.Printf("%s},", strings.Repeat(" ", level*2))
+			fmt.Printf("%s},", space)
 			fmt.Println()
 		} else {
 			label := x.key.Literal
 			if label == "" {
 				label = "default"
 			}
-			fmt.Printf("%stable[label=%s, kind=%s, pos= %s]{", strings.Repeat(" ", level*2), label, x.kind, x.Pos())
+			fmt.Printf("%stable[label=%s, kind=%s, pos= %s]{", space, label, x.kind, x.Pos())
 			fmt.Println()
 			for _, n := range sortNodes(x.nodes) {
 				dumpNode(n, level+2)
 			}
-			fmt.Printf("%s},", strings.Repeat(" ", level*2))
+			fmt.Printf("%s},", space)
 			fmt.Println()
 		}
 	}
 }
 
-func dumpLiteral(n Node) string {
+func dumpLiteral(n Node, level int) string {
 	switch x := n.(type) {
 	case *Literal:
 		return x.token.String()
@@ -54,7 +55,7 @@ func dumpLiteral(n Node) string {
 				b.WriteRune(comma)
 				b.WriteRune(space)
 			}
-			b.WriteString(dumpLiteral(n))
+			b.WriteString(dumpLiteral(n, level))
 		}
 		b.WriteRune(rsquare)
 		return b.String()
@@ -69,7 +70,7 @@ func dumpLiteral(n Node) string {
 			} else {
 				b.WriteString(o.key.Literal)
 				b.WriteRune(equal)
-				b.WriteString(dumpLiteral(o.value))
+				b.WriteString(dumpLiteral(o.value, level))
 			}
 			b.WriteRune(comma)
 			b.WriteRune(space)

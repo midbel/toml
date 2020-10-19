@@ -17,6 +17,10 @@ type comment struct {
 	post string
 }
 
+func (c *comment) isZero() bool {
+	return c.pre == "" && c.post == ""
+}
+
 func (c *comment) withComment(pre, post string) {
 	c.pre = pre
 	c.post = post
@@ -41,18 +45,30 @@ type Literal struct {
 	token Token
 }
 
-func (l *Literal) String() string {
-	return l.token.Literal
+func (i *Literal) String() string {
+	return i.token.Literal
 }
 
-func (l *Literal) Pos() Position {
-	return l.token.Pos
+func (i *Literal) Pos() Position {
+	return i.token.Pos
 }
 
 type Array struct {
 	comment
 	pos   Position
 	nodes []Node
+}
+
+func (a *Array) isMultiline() bool {
+	var prev Position
+	for _, n := range a.nodes {
+		curr := n.Pos()
+		if !prev.IsZero() && curr.Line != prev.Line {
+			return true
+		}
+		prev = curr
+	}
+	return false
 }
 
 func (a *Array) String() string {
@@ -76,6 +92,10 @@ const (
 	tableItem
 	tableInline
 )
+
+func (t tableType) isContainer() bool {
+	return t == tableImplicit || t == tableRegular || t == tableArray
+}
 
 func (t tableType) String() string {
 	switch t {
@@ -108,6 +128,38 @@ func (t *Table) String() string {
 
 func (t *Table) Pos() Position {
 	return t.key.Pos
+}
+
+func (t *Table) isRoot() bool {
+	return t.key.isZero()
+}
+
+func (t *Table) listOptions() []*Option {
+	var vs []*Option
+	for _, n := range t.nodes {
+		o, ok := n.(*Option)
+		if ok {
+			vs = append(vs, o)
+		}
+	}
+	sort.Slice(vs, func(i, j int) bool {
+		return vs[i].Pos().Less(vs[j].Pos())
+	})
+	return vs
+}
+
+func (t *Table) listTables() []*Table {
+	var vs []*Table
+	for _, n := range t.nodes {
+		t, ok := n.(*Table)
+		if ok {
+			vs = append(vs, t)
+		}
+	}
+	sort.Slice(vs, func(i, j int) bool {
+		return vs[i].Pos().Less(vs[j].Pos())
+	})
+	return vs
 }
 
 func (t *Table) retrieveTable(tok Token) (*Table, error) {

@@ -62,6 +62,10 @@ func (p Position) String() string {
 	return fmt.Sprintf("%d:%d", p.Line, p.Column)
 }
 
+func (p Position) Less(other Position) bool {
+	return p.Line < other.Line
+}
+
 type Token struct {
 	Literal string
 	Type    rune

@@ -4,6 +4,8 @@ repository = "https://github.com/midbel/toml"
 provides   = ["toml", "tomllint"] # other command to be added later
 revision   = 18 # not sure of the revision number
 
+# first comment
+# second comment
 [dev] # a comment
 name  = "midbel"
 email = "noreply@midbel.org"

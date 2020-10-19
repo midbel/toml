@@ -29,7 +29,6 @@ func Parse(r io.Reader) (Node, error) {
 
 func (p *Parser) Parse() (Node, error) {
 	t := Table{
-		key:  Token{Literal: "default", Type: TokIdent},
 		kind: tableRegular,
 	}
 	if err := p.parseOptions(&t); err != nil {
