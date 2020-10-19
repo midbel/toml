@@ -1,15 +1,15 @@
 package toml
 
 import (
-  "bufio"
+	"bufio"
 	"fmt"
 	"io"
 	"strings"
 )
 
 func Format(r io.Reader, w io.Writer) error {
-  ws := bufio.NewWriter(w)
-  defer ws.Flush()
+	ws := bufio.NewWriter(w)
+	defer ws.Flush()
 	doc, err := Parse(r)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 	if t.isRoot() {
 		return nil
 	}
-  formatComment(t.comment.pre, "\n", w)
+	formatComment(t.comment.pre, "\n", true, w)
 	var pattern string
 	switch t.kind {
 	case tableRegular:
@@ -59,7 +59,7 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 		parents = append(parents, t.key.Literal)
 	}
 	fmt.Fprintf(w, pattern, strings.Join(parents, "."))
-  formatComment(t.comment.post, "", w)
+	formatComment(t.comment.post, "", false, w)
 	fmt.Fprintln(w)
 	return nil
 }
@@ -67,14 +67,14 @@ func formatHeader(t *Table, parents []string, w io.Writer) error {
 func formatOptions(options []*Option, w io.Writer) error {
 	length := longestKey(options)
 	for _, o := range options {
-    formatComment(o.comment.pre, "\n", w)
+		formatComment(o.comment.pre, "\n", true, w)
 		if _, err := fmt.Fprintf(w, "%-*s = ", length, o.key.Literal); err != nil {
 			return err
 		}
 		if err := formatValue(o.value, w); err != nil {
 			return err
 		}
-    formatComment(o.comment.post, "", w)
+		formatComment(o.comment.post, "", false, w)
 		fmt.Fprintln(w)
 	}
 	return nil
@@ -133,15 +133,15 @@ func formatArray(a *Array, w io.Writer) {
 		if multi {
 			fmt.Fprint(w, "\n\t")
 		} else if !multi && i > 0 {
-      fmt.Fprint(w, " ")
-    }
+			fmt.Fprint(w, " ")
+		}
 		com := retr(n)
-    formatComment(com.pre, "\n\t", w)
+		formatComment(com.pre, "\n\t", true, w)
 		formatValue(n, w)
 		if i < len(a.nodes)-1 || multi {
 			fmt.Fprint(w, ",")
 		}
-    formatComment(com.post, "", w)
+		formatComment(com.post, "", false, w)
 	}
 	if multi {
 		fmt.Fprintln(w)
@@ -149,17 +149,23 @@ func formatArray(a *Array, w io.Writer) {
 	fmt.Fprint(w, "]")
 }
 
-func formatComment(comment, eol string, w io.Writer) {
-  if comment == "" {
-    return
+func formatComment(comment, eol string, pre bool, w io.Writer) {
+	if comment == "" {
+		return
+	}
+  var (
+    scan = bufio.NewScanner(strings.NewReader(comment))
+    pat = " # %s"
+  )
+  if pre {
+    pat = strings.TrimSpace(pat)
   }
-  s := bufio.NewScanner(strings.NewReader(comment))
-  for s.Scan() {
-    fmt.Fprintf(w, " # %s", s.Text())
-    if eol != "" {
-      fmt.Fprint(w, eol)
-    }
-  }
+	for scan.Scan() {
+		fmt.Fprintf(w, pat, scan.Text())
+		if eol != "" {
+			fmt.Fprint(w, eol)
+		}
+	}
 }
 
 func longestKey(options []*Option) int {
