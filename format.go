@@ -42,52 +42,78 @@ func WithComment(with bool) FormatRule {
 	}
 }
 
-func WithFloat(format string) FormatRule {
+func WithArray(format string) FormatRule {
 	return func(ft *Formatter) error {
-		var spec byte
 		switch strings.ToLower(format) {
-		case "e":
-			spec = 'e'
-		case "", "f":
-			spec = 'f'
-		case "g":
-			spec = 'g'
+		case "", "mixed":
+			ft.withArray = arrayMixed
+		case "multi":
+			ft.withArray = arrayMulti
+		case "single":
+			ft.withArray = arraySingle
 		default:
-			return fmt.Errorf("%s: unsupported specifier", format)
+			return fmt.Errorf("%s: unsupported array format", format)
 		}
-		ft.floatconv = formatFloat(spec)
 		return nil
 	}
 }
 
-func WithNumber(format string) FormatRule {
+func WithTime(millis int, utc bool) FormatRule {
+	return func(ft *Formatter) error {
+		if millis > 9 {
+			millis = 9
+		}
+		ft.timeconv = formatTime("", utc)
+		return nil
+	}
+}
+
+func WithFloat(format string, underscore int) FormatRule {
+	return func(ft *Formatter) error {
+		var spec byte
+		switch strings.ToLower(format) {
+		case "e", "scientific":
+			spec = 'e'
+		case "", "f", "float":
+			spec = 'f'
+		case "g", "auto":
+			spec = 'g'
+		default:
+			return fmt.Errorf("%s: unsupported specifier", format)
+		}
+		ft.floatconv = formatFloat(spec, underscore)
+		return nil
+	}
+}
+
+func WithNumber(format string, underscore int) FormatRule {
 	return func(ft *Formatter) error {
 		var (
 			base   int
 			prefix string
 		)
 		switch strings.ToLower(format) {
-		case "x":
+		case "x", "hexa", "hex":
 			base, prefix = 16, "0x"
-		case "o":
+		case "o", "octal", "oct":
 			base, prefix = 8, "0o"
-		case "b":
+		case "b", "binary", "bin":
 			base, prefix = 2, "0b"
-		case "", "d":
+		case "", "d", "decimal", "dec":
 			base = 10
 		default:
 			return fmt.Errorf("%s: unsupported base", format)
 		}
-		ft.intconv = formatInteger(base, prefix)
+		ft.intconv = formatInteger(base, underscore, prefix)
 		return nil
 	}
 }
 
-func WithTime(utc bool, millis int) FormatRule {
-	return func(ft *Formatter) error {
-		return nil
-	}
-}
+const (
+	arrayMixed int = iota
+	arraySingle
+	arrayMulti
+)
 
 type Formatter struct {
 	doc    Node
@@ -97,6 +123,7 @@ type Formatter struct {
 	intconv   func(string) (string, error)
 	timeconv  func(string) (string, error)
 
+	withArray   int
 	withTab     string
 	withEmpty   bool
 	withComment bool
@@ -112,6 +139,7 @@ func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 		floatconv:   identity,
 		intconv:     identity,
 		timeconv:    identity,
+		withArray:   arrayMixed,
 		withTab:     "\t",
 		withEmpty:   false,
 		withNest:    false,
@@ -159,6 +187,10 @@ func (f *Formatter) formatTable(curr *Table, paths []string) error {
 	if !curr.isRoot() && curr.kind.isContainer() {
 		paths = append(paths, curr.key.Literal)
 	}
+	if f.canNest(curr) {
+		f.enterLevel(false)
+		defer f.leaveLevel(false)
+	}
 	for _, next := range curr.listTables() {
 		if err := f.formatTable(next, paths); err != nil {
 			return err
@@ -171,8 +203,8 @@ func (f *Formatter) formatOptions(options []*Option) error {
 	length := longestKey(options)
 	for _, o := range options {
 		f.formatComment(o.comment.pre, true)
-    f.beginLine()
-    f.writeKey(o.key.Literal, length)
+		f.beginLine()
+		f.writeKey(o.key.Literal, length)
 		if err := f.formatValue(o.value); err != nil {
 			return err
 		}
@@ -189,15 +221,7 @@ func (f *Formatter) formatValue(n Node) error {
 	var err error
 	switch n := n.(type) {
 	case *Literal:
-		pat := "%s"
-		if n.token.Type == TokString {
-			pat = "\"%s\""
-		}
-		str, err := f.convertValue(n.token)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(f.writer, pat, str)
+		err = f.formatLiteral(n)
 	case *Array:
 		err = f.formatArray(n)
 	case *Table:
@@ -208,10 +232,26 @@ func (f *Formatter) formatValue(n Node) error {
 	return err
 }
 
+func (f *Formatter) formatLiteral(i *Literal) error {
+	if i.token.Type == TokString {
+		f.writer.WriteString("\"")
+		f.writer.WriteString(i.token.Literal)
+		f.writer.WriteString("\"")
+		return nil
+	}
+	str, err := f.convertValue(i.token)
+	if err == nil {
+		f.writer.WriteString(str)
+	}
+	return err
+}
+
 func (f *Formatter) convertValue(tok Token) (string, error) {
 	switch tok.Type {
 	default:
 		return tok.Literal, nil
+	// case TokDatetime:
+	// 	return f.timeconv(tok.Literal)
 	case TokInteger:
 		return f.intconv(tok.Literal)
 	case TokFloat:
@@ -220,6 +260,12 @@ func (f *Formatter) convertValue(tok Token) (string, error) {
 }
 
 func (f *Formatter) formatArray(a *Array) error {
+	if len(a.nodes) <= 1 || f.withArray == arraySingle {
+		return f.formatArrayLine(a)
+	}
+	if f.withArray == arrayMulti {
+		return f.formatArrayMultiline(a)
+	}
 	if a.isMultiline() {
 		return f.formatArrayMultiline(a)
 	}
@@ -262,10 +308,10 @@ func (f *Formatter) formatArrayMultiline(a *Array) error {
 func (f *Formatter) formatArrayLine(a *Array) error {
 	f.writer.WriteString("[")
 	for i, n := range a.nodes {
-		if err :=f.formatValue(n); err != nil {
+		if err := f.formatValue(n); err != nil {
 			return err
 		}
-		if i < len(a.nodes) - 1 {
+		if i < len(a.nodes)-1 {
 			f.writer.WriteString(", ")
 		}
 	}
@@ -274,12 +320,16 @@ func (f *Formatter) formatArrayLine(a *Array) error {
 }
 
 func (f *Formatter) formatInline(t *Table) error {
+	defer func(array int) {
+		f.withArray = array
+	}(f.withArray)
+	f.withArray = arraySingle
 	f.writer.WriteString("{")
 	for i, o := range t.listOptions() {
 		if i > 0 {
 			f.writer.WriteString(", ")
 		}
-    f.writeKey(o.key.Literal, 0)
+		f.writeKey(o.key.Literal, 0)
 		if err := f.formatValue(o.value); err != nil {
 			return err
 		}
@@ -297,7 +347,7 @@ func (f *Formatter) formatHeader(curr *Table, paths []string) error {
 	}
 	f.formatComment(curr.comment.pre, true)
 	switch str := strings.Join(paths, "."); curr.kind {
-	case tableRegular:
+	case tableRegular, tableImplicit:
 		f.writeRegularHeader(str)
 	case tableItem:
 		f.writeArrayHeader(str)
@@ -321,11 +371,11 @@ func (f *Formatter) formatComment(comment string, pre bool) error {
 }
 
 func (f *Formatter) enterArray() {
-  f.enterLevel(true)
+	f.enterLevel(true)
 }
 
 func (f *Formatter) leaveArray() {
-  f.leaveLevel(true)
+	f.leaveLevel(true)
 }
 
 func (f *Formatter) enterLevel(force bool) {
@@ -340,10 +390,20 @@ func (f *Formatter) leaveLevel(force bool) {
 	}
 }
 
+func (f *Formatter) canNest(curr *Table) bool {
+	if curr.isRoot() {
+		return false
+	}
+	if curr.kind == tableImplicit && !f.withEmpty {
+		return false
+	}
+	return curr.kind.canNest()
+}
+
 func (f *Formatter) writeKey(str string, length int) {
 	n, _ := f.writer.WriteString(str)
 	if length > 0 {
-		f.writer.WriteString(strings.Repeat(" ", length - n))
+		f.writer.WriteString(strings.Repeat(" ", length-n))
 	}
 	f.writer.WriteString(" = ")
 }
@@ -397,23 +457,77 @@ func longestKey(options []*Option) int {
 	return length
 }
 
-func formatFloat(specifier byte) func(string) (string, error) {
+func formatTime(pattern string, utc bool) func(string) (string, error) {
+	return func(str string) (string, error) {
+		if utc {
+
+		}
+		return str, nil
+	}
+}
+
+func formatFloat(specifier byte, underscore int) func(string) (string, error) {
 	return func(str string) (string, error) {
 		f, err := strconv.ParseFloat(str, 64)
 		if err != nil {
 			return "", err
 		}
-		return strconv.FormatFloat(f, specifier, -1, 64), nil
+		str = strconv.FormatFloat(f, specifier, -1, 64)
+		return withUnderscore(str, underscore), nil
 	}
 }
 
-func formatInteger(base int, prefix string) func(string) (string, error) {
+func formatInteger(base, underscore int, prefix string) func(string) (string, error) {
 	return func(str string) (string, error) {
 		n, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
 			return "", err
 		}
 		str = strconv.FormatInt(n, base)
-		return prefix + str, nil
+		return prefix + withUnderscore(str, underscore), nil
 	}
+}
+
+func withUnderscore(str string, every int) string {
+	if every == 0 || len(str) < every {
+		return str
+	}
+	x := strings.Index(str, ".")
+	if x < 0 {
+		return insertUnderscore(str, every)
+	}
+	part := insertUnderscore(str[:x], every) + "."
+	str = str[x+1:]
+	x = strings.IndexAny(str, "eE")
+	if x < 0 {
+		return part + insertUnderscore(str, every)
+	}
+	part += insertUnderscore(str[:x], every)
+	part += "e"
+	if str[x+1] == '+' || str[x+1] == '-' {
+		x++
+		part += string(str[x])
+	}
+	return part + insertUnderscore(str[x+1:], every)
+}
+
+func insertUnderscore(str string, every int) string {
+	if len(str) <= every {
+		return str
+	}
+	var (
+		i   = len(str) % every
+		buf bytes.Buffer
+	)
+	if i > 0 {
+		buf.WriteString(str[:i])
+		buf.WriteString("_")
+	}
+	for i < len(str) && i+every < len(str) {
+		buf.WriteString(str[i : i+every])
+		buf.WriteString("_")
+		i += every
+	}
+	buf.WriteString(str[i:])
+	return buf.String()
 }

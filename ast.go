@@ -97,6 +97,10 @@ func (t tableType) isContainer() bool {
 	return t == tableImplicit || t == tableRegular || t == tableArray
 }
 
+func (t tableType) canNest() bool {
+	return t == tableImplicit || t == tableRegular || t == tableItem
+}
+
 func (t tableType) String() string {
 	switch t {
 	case tableImplicit:
