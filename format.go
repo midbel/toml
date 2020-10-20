@@ -91,7 +91,6 @@ func WithTime(utc bool, millis int) FormatRule {
 
 type Formatter struct {
 	doc    Node
-	level  int
 	writer *bufio.Writer
 
 	floatconv func(string) (string, error)
@@ -100,11 +99,12 @@ type Formatter struct {
 
 	withTab     string
 	withEmpty   bool
-	withNest    bool
 	withComment bool
+	withNest    bool
+	currLevel   int
 }
 
-func NewFormatter(doc string, rules ...FormatRule) (Formatter, error) {
+func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 	identity := func(str string) (string, error) {
 		return str, nil
 	}
@@ -120,21 +120,21 @@ func NewFormatter(doc string, rules ...FormatRule) (Formatter, error) {
 
 	buf, err := ioutil.ReadFile(doc)
 	if err != nil {
-		return f, err
+		return nil, err
 	}
 	f.doc, err = Parse(bytes.NewReader(buf))
 	if err != nil {
-		return f, err
+		return nil, err
 	}
 	for _, rfn := range rules {
 		if err := rfn(&f); err != nil {
-			return f, err
+			return nil, err
 		}
 	}
-	return f, nil
+	return &f, nil
 }
 
-func (f Formatter) Format(w io.Writer) error {
+func (f *Formatter) Format(w io.Writer) error {
 	f.writer = bufio.NewWriter(w)
 	root, ok := f.doc.(*Table)
 	if !ok {
@@ -146,7 +146,7 @@ func (f Formatter) Format(w io.Writer) error {
 	return f.writer.Flush()
 }
 
-func (f Formatter) formatTable(curr *Table, paths []string) error {
+func (f *Formatter) formatTable(curr *Table, paths []string) error {
 	options := curr.listOptions()
 	if f.withEmpty || len(options) > 0 {
 		f.formatHeader(curr, paths)
@@ -154,7 +154,7 @@ func (f Formatter) formatTable(curr *Table, paths []string) error {
 		if err != nil {
 			return nil
 		}
-		fmt.Fprintln(f.writer)
+		f.endLine()
 	}
 	if !curr.isRoot() && curr.kind.isContainer() {
 		paths = append(paths, curr.key.Literal)
@@ -167,23 +167,22 @@ func (f Formatter) formatTable(curr *Table, paths []string) error {
 	return nil
 }
 
-func (f Formatter) formatOptions(options []*Option) error {
+func (f *Formatter) formatOptions(options []*Option) error {
 	length := longestKey(options)
 	for _, o := range options {
-		f.formatComment(o.comment.pre, "\n", true)
-		if _, err := fmt.Fprintf(f.writer, "%-*s = ", length, o.key.Literal); err != nil {
-			return err
-		}
+		f.formatComment(o.comment.pre, true)
+    f.beginLine()
+    f.writeKey(o.key.Literal, length)
 		if err := f.formatValue(o.value); err != nil {
 			return err
 		}
-		f.formatComment(o.comment.post, "", false)
-		fmt.Fprintln(f.writer)
+		f.formatComment(o.comment.post, false)
+		f.endLine()
 	}
 	return nil
 }
 
-func (f Formatter) formatValue(n Node) error {
+func (f *Formatter) formatValue(n Node) error {
 	if n == nil {
 		return nil
 	}
@@ -209,7 +208,7 @@ func (f Formatter) formatValue(n Node) error {
 	return err
 }
 
-func (f Formatter) convertValue(tok Token) (string, error) {
+func (f *Formatter) convertValue(tok Token) (string, error) {
 	switch tok.Type {
 	default:
 		return tok.Literal, nil
@@ -220,7 +219,14 @@ func (f Formatter) convertValue(tok Token) (string, error) {
 	}
 }
 
-func (f Formatter) formatArray(a *Array) error {
+func (f *Formatter) formatArray(a *Array) error {
+	if a.isMultiline() {
+		return f.formatArrayMultiline(a)
+	}
+	return f.formatArrayLine(a)
+}
+
+func (f *Formatter) formatArrayMultiline(a *Array) error {
 	retr := func(n Node) comment {
 		var c comment
 		switch n := n.(type) {
@@ -233,86 +239,151 @@ func (f Formatter) formatArray(a *Array) error {
 		}
 		return c
 	}
-	multi := a.isMultiline()
-	fmt.Fprint(f.writer, "[")
-	for i, n := range a.nodes {
-		if multi {
-			fmt.Fprint(f.writer, "\n\t")
-		} else if !multi && i > 0 {
-			fmt.Fprint(f.writer, " ")
-		}
+	f.enterArray()
+	defer f.leaveArray()
+
+	f.writer.WriteString("[")
+	f.endLine()
+	for _, n := range a.nodes {
 		com := retr(n)
-		f.formatComment(com.pre, "\n\t", true)
+		f.formatComment(com.pre, true)
+		f.beginLine()
 		if err := f.formatValue(n); err != nil {
 			return err
 		}
-		if i < len(a.nodes)-1 || multi {
-			fmt.Fprint(f.writer, ",")
-		}
-		f.formatComment(com.post, "", false)
+		f.writer.WriteString(",")
+		f.formatComment(com.post, false)
+		f.endLine()
 	}
-	if multi {
-		fmt.Fprintln(f.writer)
-	}
-	fmt.Fprint(f.writer, "]")
+	f.writer.WriteString("]")
 	return nil
 }
 
-func (f Formatter) formatInline(t *Table) error {
-	fmt.Fprint(f.writer, "{")
+func (f *Formatter) formatArrayLine(a *Array) error {
+	f.writer.WriteString("[")
+	for i, n := range a.nodes {
+		if err :=f.formatValue(n); err != nil {
+			return err
+		}
+		if i < len(a.nodes) - 1 {
+			f.writer.WriteString(", ")
+		}
+	}
+	f.writer.WriteString("]")
+	return nil
+}
+
+func (f *Formatter) formatInline(t *Table) error {
+	f.writer.WriteString("{")
 	for i, o := range t.listOptions() {
 		if i > 0 {
-			fmt.Fprint(f.writer, ", ")
+			f.writer.WriteString(", ")
 		}
-		fmt.Fprintf(f.writer, "%s = ", o.key.Literal)
+    f.writeKey(o.key.Literal, 0)
 		if err := f.formatValue(o.value); err != nil {
 			return err
 		}
 	}
-	fmt.Fprint(f.writer, "}")
+	f.writer.WriteString("}")
 	return nil
 }
 
-func (f Formatter) formatHeader(curr *Table, paths []string) error {
+func (f *Formatter) formatHeader(curr *Table, paths []string) error {
 	if curr.isRoot() {
 		return nil
-	}
-	var pat string
-	switch curr.kind {
-	case tableRegular:
-		pat = "[%s]"
-	case tableArray:
-	case tableItem:
-		pat = "[[%s]]"
 	}
 	if curr.kind != tableItem {
 		paths = append(paths, curr.key.Literal)
 	}
-	f.formatComment(curr.comment.pre, "\n", true)
-	fmt.Fprintf(f.writer, pat, strings.Join(paths, "."))
-	f.formatComment(curr.comment.post, "", false)
-	fmt.Fprintln(f.writer)
+	f.formatComment(curr.comment.pre, true)
+	switch str := strings.Join(paths, "."); curr.kind {
+	case tableRegular:
+		f.writeRegularHeader(str)
+	case tableItem:
+		f.writeArrayHeader(str)
+	default:
+		return fmt.Errorf("%s: can not write header for %s", curr.kind, str)
+	}
+	f.formatComment(curr.comment.post, false)
+	f.endLine()
 	return nil
 }
 
-func (f Formatter) formatComment(comment, eol string, pre bool) error {
+func (f *Formatter) formatComment(comment string, pre bool) error {
 	if !f.withComment || comment == "" {
 		return nil
 	}
-	var (
-		scan = bufio.NewScanner(strings.NewReader(comment))
-		pat  = " # %s"
-	)
-	if pre {
-		pat = strings.TrimSpace(pat)
-	}
+	scan := bufio.NewScanner(strings.NewReader(comment))
 	for scan.Scan() {
-		fmt.Fprintf(f.writer, pat, scan.Text())
-		if eol != "" {
-			fmt.Fprint(f.writer, eol)
-		}
+		f.writeComment(scan.Text(), pre)
 	}
-	return nil
+	return scan.Err()
+}
+
+func (f *Formatter) enterArray() {
+  f.enterLevel(true)
+}
+
+func (f *Formatter) leaveArray() {
+  f.leaveLevel(true)
+}
+
+func (f *Formatter) enterLevel(force bool) {
+	if f.withNest || force {
+		f.currLevel++
+	}
+}
+
+func (f *Formatter) leaveLevel(force bool) {
+	if f.withNest || force {
+		f.currLevel--
+	}
+}
+
+func (f *Formatter) writeKey(str string, length int) {
+	n, _ := f.writer.WriteString(str)
+	if length > 0 {
+		f.writer.WriteString(strings.Repeat(" ", length - n))
+	}
+	f.writer.WriteString(" = ")
+}
+
+func (f *Formatter) writeComment(str string, pre bool) {
+	if pre {
+		f.beginLine()
+	} else {
+		f.writer.WriteString(" ")
+	}
+	f.writer.WriteString("# ")
+	f.writer.WriteString(str)
+	if pre {
+		f.endLine()
+	}
+}
+
+func (f *Formatter) writeRegularHeader(str string) {
+	f.beginLine()
+	f.writer.WriteString("[")
+	f.writer.WriteString(str)
+	f.writer.WriteString("]")
+}
+
+func (f *Formatter) writeArrayHeader(str string) {
+	f.beginLine()
+	f.writer.WriteString("[[")
+	f.writer.WriteString(str)
+	f.writer.WriteString("]]")
+}
+
+func (f *Formatter) endLine() {
+	f.writer.WriteString("\n")
+}
+
+func (f *Formatter) beginLine() {
+	if f.currLevel == 0 {
+		return
+	}
+	f.writer.WriteString(strings.Repeat(f.withTab, f.currLevel))
 }
 
 func longestKey(options []*Option) int {
