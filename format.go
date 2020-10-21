@@ -357,7 +357,11 @@ func (f *Formatter) formatArrayMultiline(a *Array) error {
 		return c
 	}
 	f.enterArray()
-	defer f.leaveArray()
+	defer func() {
+		f.leaveArray()
+		f.beginLine()
+		f.writer.WriteString("]")
+	}()
 
 	f.writer.WriteString("[")
 	f.endLine()
@@ -372,7 +376,6 @@ func (f *Formatter) formatArrayMultiline(a *Array) error {
 		f.formatComment(com.post, false)
 		f.endLine()
 	}
-	f.writer.WriteString("]")
 	return nil
 }
 
