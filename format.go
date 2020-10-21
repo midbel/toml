@@ -215,21 +215,21 @@ func (f *Formatter) formatTable(curr *Table, paths []string) error {
 }
 
 func (f *Formatter) formatOptions(options []*Option, paths []string) error {
-	type subtable struct {
+	type table struct {
 		prefix string
 		*Table
 	}
 	var (
 		length  = longestKey(options)
 		array   int
-		inlines []subtable
+		inlines []table
 	)
 	for _, o := range options {
 		if i, ok := o.value.(*Table); ok && f.withInline {
 			i.kind = tableRegular
 			i.key = o.key
 			i.comment = o.comment
-			inlines = append(inlines, subtable{Table: i})
+			inlines = append(inlines, table{Table: i})
 			continue
 		}
 		if i, ok := o.value.(*Array); ok && f.withInline {
@@ -247,7 +247,7 @@ func (f *Formatter) formatOptions(options []*Option, paths []string) error {
 				}
 			}
 			if !t.isEmpty() {
-				sub := subtable{Table: &t}
+				sub := table{Table: &t}
 				if !a.isEmpty() {
 					sub.prefix = fmt.Sprintf("\"#%d\"", array)
 					array++
