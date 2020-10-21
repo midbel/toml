@@ -162,7 +162,7 @@ func decodeLiteral(i *Literal, e reflect.Value) error {
 	case TokFloat:
 		err = decodeFloat(e, str)
 	case TokDatetime:
-		patterns := makePatterns([]string{dtFormat1, dtFormat2})
+		patterns := makeAllPatterns()
 		err = decodeTime(e, str, patterns)
 	case TokDate:
 		err = decodeTime(e, str, []string{dateFormat})
@@ -497,11 +497,16 @@ var (
 	dtFormat2  = dateFormat + " " + timeFormat
 	millisPrec = ".000"
 	microsPrec = ".000000"
+	nanosPrec  = ".000000000"
 )
 
-func makePatterns(patterns []string) []string {
+func makeAllPatterns() []string {
+	return makePatterns(dtFormat1, dtFormat2)
+}
+
+func makePatterns(patterns ...string) []string {
 	ps := make([]string, 0, len(patterns)*4)
-	millis := []string{millisPrec, microsPrec}
+	millis := []string{millisPrec, microsPrec, nanosPrec}
 	for _, p := range patterns {
 		ps = append(ps, p)
 		ps = append(ps, p+tzFormat)

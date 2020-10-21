@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type FormatRule func(*Formatter) error
@@ -70,7 +71,12 @@ func WithTime(millis int, utc bool) FormatRule {
 		if millis > 9 {
 			millis = 9
 		}
-		ft.timeconv = formatTime("", utc)
+		pattern := "2006-01-02 15:04:05"
+		if millis > 0 {
+			pattern += "." + strings.Repeat("0", millis)
+		}
+		pattern += "-07:00"
+		ft.timeconv = formatTime(pattern, utc)
 		return nil
 	}
 }
@@ -148,10 +154,11 @@ func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 		intconv:     identity,
 		timeconv:    identity,
 		withArray:   arrayMixed,
-		withTab:     "\t",
+		withInline:  false,
 		withEmpty:   false,
 		withNest:    false,
 		withComment: true,
+		withTab:     "\t",
 	}
 
 	buf, err := ioutil.ReadFile(doc)
@@ -314,8 +321,8 @@ func (f *Formatter) convertValue(tok Token) (string, error) {
 	switch tok.Type {
 	default:
 		return tok.Literal, nil
-	// case TokDatetime:
-	// 	return f.timeconv(tok.Literal)
+	case TokDatetime:
+		return f.timeconv(tok.Literal)
 	case TokInteger:
 		return f.intconv(tok.Literal)
 	case TokFloat:
@@ -522,11 +529,27 @@ func longestKey(options []*Option) int {
 }
 
 func formatTime(pattern string, utc bool) func(string) (string, error) {
+	if pattern == "" {
+		pattern = time.RFC3339
+	}
 	return func(str string) (string, error) {
-		if utc {
-
+		var (
+			when time.Time
+			err  error
+		)
+		for _, pat := range makeAllPatterns() {
+			when, err = time.Parse(pat, str)
+			if err == nil {
+				break
+			}
 		}
-		return str, nil
+		if err != nil {
+			return "", err
+		}
+		if utc {
+			when = when.UTC()
+		}
+		return when.Format(pattern), nil
 	}
 }
 
