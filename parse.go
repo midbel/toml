@@ -132,8 +132,12 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 	}
 	var (
 		opt = Option{key: p.curr}
+		pre string
+		post string
 		err error
 	)
+	pre = p.comment.String()
+	p.comment.Reset()
 	p.next()
 	if p.curr.Type != TokEqual {
 		return p.unexpectedToken("'='", "option")
@@ -148,12 +152,11 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		opt.value, err = p.parseLiteral()
 		p.next()
 	}
-	var comment string
 	if p.curr.isComment() {
-		comment = p.curr.Literal
+		post = p.curr.Literal
 		p.next()
 	}
-	opt.withComment(p.comment.String(), comment)
+	opt.withComment(pre, post)
 	if err == nil {
 		err = t.registerOption(&opt)
 	}
