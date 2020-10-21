@@ -9,6 +9,7 @@ type Node interface {
 	Pos() Position
 	fmt.Stringer
 
+	isEmpty() bool
 	withComment(string, string)
 }
 
@@ -40,6 +41,10 @@ func (o *Option) Pos() Position {
 	return o.key.Pos
 }
 
+func (o *Option) isEmpty() bool {
+	return o.value == nil || o.value.isEmpty()
+}
+
 type Literal struct {
 	comment
 	token Token
@@ -53,10 +58,18 @@ func (i *Literal) Pos() Position {
 	return i.token.Pos
 }
 
+func (i *Literal) isEmpty() bool {
+	return false
+}
+
 type Array struct {
 	comment
 	pos   Position
 	nodes []Node
+}
+
+func (a *Array) isEmpty() bool {
+	return len(a.nodes) == 0
 }
 
 func (a *Array) isMultiline() bool {
@@ -132,6 +145,10 @@ func (t *Table) String() string {
 
 func (t *Table) Pos() Position {
 	return t.key.Pos
+}
+
+func (t *Table) isEmpty() bool {
+	return len(t.nodes) == 0
 }
 
 func (t *Table) isRoot() bool {

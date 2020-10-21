@@ -131,10 +131,10 @@ func (p *Parser) parseOption(t *Table, dotted bool) error {
 		return p.parseOption(x, dotted)
 	}
 	var (
-		opt = Option{key: p.curr}
-		pre string
+		opt  = Option{key: p.curr}
+		pre  string
 		post string
-		err error
+		err  error
 	)
 	pre = p.comment.String()
 	p.comment.Reset()

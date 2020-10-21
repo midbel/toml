@@ -25,7 +25,7 @@ func main() {
 		decimal    = flag.String("d", "", "format integer with the given base")
 		underscore = flag.Int("u", 0, "insert underscore in number (float/integer)")
 		// array/inline formatting option
-		array = flag.String("a", "", "write array on multiple/single line(s)")
+		array  = flag.String("a", "", "write array on multiple/single line(s)")
 		inline = flag.Bool("i", false, "convert inline table(s) to regular table(s)")
 	)
 	flag.Parse()

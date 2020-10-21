@@ -43,10 +43,10 @@ func WithComment(with bool) FormatRule {
 }
 
 func WithInline(inline bool) FormatRule {
-  return func(ft *Formatter) error {
-    ft.withInline = inline
-    return nil
-  }
+	return func(ft *Formatter) error {
+		ft.withInline = inline
+		return nil
+	}
 }
 
 func WithArray(format string) FormatRule {
@@ -131,7 +131,7 @@ type Formatter struct {
 	timeconv  func(string) (string, error)
 
 	withArray   int
-  withInline  bool
+	withInline  bool
 	withTab     string
 	withEmpty   bool
 	withComment bool
@@ -208,18 +208,50 @@ func (f *Formatter) formatTable(curr *Table, paths []string) error {
 }
 
 func (f *Formatter) formatOptions(options []*Option, paths []string) error {
-  var (
-    length = longestKey(options)
-    inlines []*Table
-  )
+	type subtable struct {
+		prefix string
+		*Table
+	}
+	var (
+		length  = longestKey(options)
+		array   int
+		inlines []subtable
+	)
 	for _, o := range options {
-    if i, ok := o.value.(*Table); ok && f.withInline {
-      i.kind = tableRegular
-      i.key = o.key
-      i.comment = o.comment
-      inlines = append(inlines, i)
-      continue
-    }
+		if i, ok := o.value.(*Table); ok && f.withInline {
+			i.kind = tableRegular
+			i.key = o.key
+			i.comment = o.comment
+			inlines = append(inlines, subtable{Table: i})
+			continue
+		}
+		if i, ok := o.value.(*Array); ok && f.withInline {
+			var (
+				a Array
+				t = Table{kind: tableArray, key: o.key}
+			)
+			for _, n := range i.nodes {
+				if nod, ok := n.(*Table); ok {
+					nod.key = o.key
+					nod.kind = tableItem
+					t.nodes = append(t.nodes, nod)
+				} else {
+					a.nodes = append(a.nodes, n)
+				}
+			}
+			if !t.isEmpty() {
+				sub := subtable{Table: &t}
+				if !a.isEmpty() {
+					sub.prefix = fmt.Sprintf("\"#%d\"", array)
+					array++
+				}
+				inlines = append(inlines, sub)
+			}
+			if a.isEmpty() {
+				continue
+			}
+			o.value = &a
+		}
 		f.formatComment(o.comment.pre, true)
 		f.beginLine()
 		f.writeKey(o.key.Literal, length)
@@ -229,14 +261,20 @@ func (f *Formatter) formatOptions(options []*Option, paths []string) error {
 		f.formatComment(o.comment.post, false)
 		f.endLine()
 	}
-  f.enterLevel(false)
-  defer f.leaveLevel(false)
-  for _, i := range inlines {
-    f.endLine()
-    if err := f.formatTable(i, paths); err != nil {
-      return err
-    }
-  }
+	if len(inlines) > 0 {
+		f.endLine()
+		f.enterLevel(false)
+		defer f.leaveLevel(false)
+		for _, i := range inlines {
+			parents := append([]string{}, paths...)
+			if i.prefix != "" {
+				parents = append(parents, i.prefix)
+			}
+			if err := f.formatTable(i.Table, parents); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
