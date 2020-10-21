@@ -17,6 +17,7 @@ func main() {
 		keep  = flag.Bool("k", false, "keep empty table(s)")
 		nest  = flag.Bool("n", false, "nest sub table(s)")
 		space = flag.Int("s", 0, "use space for indentation instead of tab")
+		nocom = flag.Bool("o", false, "ignore comment(s)")
 		// time formatting options
 		utc    = flag.Bool("g", false, "convert local date time to UTC date time")
 		millis = flag.Int("m", 0, "use given millis precision")
@@ -35,7 +36,7 @@ func main() {
 		toml.WithNest(*nest),
 		toml.WithFloat(*float, *underscore),
 		toml.WithNumber(*decimal, *underscore),
-		toml.WithComment(true),
+		toml.WithComment(!*nocom),
 		toml.WithTime(*millis, *utc),
 		toml.WithArray(*array),
 		toml.WithInline(*inline),
