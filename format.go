@@ -42,6 +42,13 @@ func WithComment(with bool) FormatRule {
 	}
 }
 
+func WithInline(inline bool) FormatRule {
+  return func(ft *Formatter) error {
+    ft.withInline = inline
+    return nil
+  }
+}
+
 func WithArray(format string) FormatRule {
 	return func(ft *Formatter) error {
 		switch strings.ToLower(format) {
@@ -124,6 +131,7 @@ type Formatter struct {
 	timeconv  func(string) (string, error)
 
 	withArray   int
+  withInline  bool
 	withTab     string
 	withEmpty   bool
 	withComment bool
@@ -178,7 +186,7 @@ func (f *Formatter) formatTable(curr *Table, paths []string) error {
 	options := curr.listOptions()
 	if f.withEmpty || len(options) > 0 {
 		f.formatHeader(curr, paths)
-		err := f.formatOptions(options)
+		err := f.formatOptions(options, append(paths, curr.key.Literal))
 		if err != nil {
 			return nil
 		}
@@ -199,9 +207,19 @@ func (f *Formatter) formatTable(curr *Table, paths []string) error {
 	return nil
 }
 
-func (f *Formatter) formatOptions(options []*Option) error {
-	length := longestKey(options)
+func (f *Formatter) formatOptions(options []*Option, paths []string) error {
+  var (
+    length = longestKey(options)
+    inlines []*Table
+  )
 	for _, o := range options {
+    if i, ok := o.value.(*Table); ok && f.withInline {
+      i.kind = tableRegular
+      i.key = o.key
+      i.comment = o.comment
+      inlines = append(inlines, i)
+      continue
+    }
 		f.formatComment(o.comment.pre, true)
 		f.beginLine()
 		f.writeKey(o.key.Literal, length)
@@ -211,6 +229,14 @@ func (f *Formatter) formatOptions(options []*Option) error {
 		f.formatComment(o.comment.post, false)
 		f.endLine()
 	}
+  f.enterLevel(false)
+  defer f.leaveLevel(false)
+  for _, i := range inlines {
+    f.endLine()
+    if err := f.formatTable(i, paths); err != nil {
+      return err
+    }
+  }
 	return nil
 }
 

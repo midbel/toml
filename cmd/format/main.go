@@ -26,7 +26,7 @@ func main() {
 		underscore = flag.Int("u", 0, "insert underscore in number (float/integer)")
 		// array/inline formatting option
 		array = flag.String("a", "", "write array on multiple/single line(s)")
-		// inline = flag.Bool("i", false, "convert inline table(s) to regular table(s)")
+		inline = flag.Bool("i", false, "convert inline table(s) to regular table(s)")
 	)
 	flag.Parse()
 	rules := []toml.FormatRule{
@@ -38,6 +38,7 @@ func main() {
 		toml.WithComment(true),
 		toml.WithTime(*millis, *utc),
 		toml.WithArray(*array),
+		toml.WithInline(*inline),
 	}
 	for _, a := range flag.Args() {
 		if err := formatDocument(a, *overwrite, rules); err != nil {
