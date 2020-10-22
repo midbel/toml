@@ -123,6 +123,20 @@ func WithNumber(format string, underscore int) FormatRule {
 	}
 }
 
+func WithEOL(format string) FormatRule {
+	return func(ft *Formatter) error {
+		switch strings.ToLower(format) {
+		case "crlf", "windows":
+			ft.withEOL = "\r\n"
+		case "lf", "linux", "":
+			ft.withEOL = "\n"
+		default:
+			return fmt.Errorf("%s: unsupported eof", format)
+		}
+		return nil
+	}
+}
+
 const (
 	arrayMixed int = iota
 	arraySingle
@@ -140,6 +154,7 @@ type Formatter struct {
 	withArray   int
 	withInline  bool
 	withTab     string
+	withEOL     string
 	withEmpty   bool
 	withComment bool
 	withNest    bool
@@ -160,6 +175,7 @@ func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 		withNest:    false,
 		withComment: true,
 		withTab:     "\t",
+		withEOL:     "\n",
 	}
 
 	buf, err := ioutil.ReadFile(doc)
@@ -341,7 +357,6 @@ func (f *Formatter) formatString(tok Token) {
 		f.endLine()
 	}
 	str := escapeString(tok.Literal, isMulti, escape)
-	fmt.Println(str, isMulti, strings.IndexByte(str, newline))
 	if isMulti && strings.IndexByte(str, newline) < 0 {
 		str = splitString(str)
 	}
@@ -650,7 +665,7 @@ func (f *Formatter) writeArrayHeader(str string) {
 }
 
 func (f *Formatter) endLine() {
-	f.writer.WriteString("\n")
+	f.writer.WriteString(f.withEOL)
 }
 
 func (f *Formatter) beginLine() {

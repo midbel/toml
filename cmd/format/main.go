@@ -18,6 +18,7 @@ func main() {
 		nest  = flag.Bool("n", false, "nest sub table(s)")
 		space = flag.Int("s", 0, "use space for indentation instead of tab")
 		nocom = flag.Bool("o", false, "ignore comment(s)")
+		eol   = flag.String("e", "", "end of line")
 		// time formatting options
 		utc    = flag.Bool("g", false, "convert local date time to UTC date time")
 		millis = flag.Int("m", 0, "use given millis precision")
@@ -40,6 +41,7 @@ func main() {
 		toml.WithTime(*millis, *utc),
 		toml.WithArray(*array),
 		toml.WithInline(*inline),
+		toml.WithEOL(*eol),
 	}
 	for _, a := range flag.Args() {
 		if err := formatDocument(a, *overwrite, rules); err != nil {
