@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type FormatRule func(*Formatter) error
@@ -304,10 +305,8 @@ func (f *Formatter) formatValue(n Node) error {
 }
 
 func (f *Formatter) formatLiteral(i *Literal) error {
-	if i.token.Type == TokString {
-		f.writer.WriteString("\"")
-		f.writer.WriteString(i.token.Literal)
-		f.writer.WriteString("\"")
+	if i.token.isString() {
+		f.formatString(i.token)
 		return nil
 	}
 	str, err := f.convertValue(i.token)
@@ -315,6 +314,104 @@ func (f *Formatter) formatLiteral(i *Literal) error {
 		f.writer.WriteString(str)
 	}
 	return err
+}
+
+func (f *Formatter) formatString(tok Token) {
+	var (
+		isMulti bool
+		quoting string
+		escape  func(rune) (rune, bool)
+	)
+	switch tok.Type {
+	case TokBasic:
+		escape = escapeBasic
+		quoting = "\""
+	case TokBasicMulti:
+		escape = escapeMulti
+		quoting, isMulti = "\"\"\"", true
+	case TokLiteral:
+		quoting = "'"
+	case TokLiteralMulti:
+		quoting, isMulti = "'''", true
+	default:
+		return
+	}
+	f.writer.WriteString(quoting)
+	if isMulti {
+		f.endLine()
+	}
+	f.writer.WriteString(escapeString(tok.Literal, isMulti, escape))
+	f.writer.WriteString(quoting)
+}
+
+func escapeBasic(r rune) (rune, bool) {
+	switch r {
+	case backslash:
+	case dquote:
+	case newline:
+		r = 'n'
+	case tab:
+		r = 't'
+	case formfeed:
+		r = 'f'
+	case backspace:
+		r = 'b'
+	case carriage:
+		r = 'r'
+	default:
+		return r, false
+	}
+	return r, true
+}
+
+func escapeMulti(r rune) (rune, bool) {
+	switch r {
+	case backslash:
+	case dquote:
+	case tab:
+		r = 't'
+	case formfeed:
+		r = 'f'
+	case backspace:
+		r = 'b'
+	case carriage:
+		r = 'r'
+	default:
+		return r, false
+	}
+	return r, true
+}
+
+func escapeString(str string, multi bool, escape func(r rune) (rune, bool)) string {
+	if escape == nil {
+		return str
+	}
+	var (
+		i  int
+		b  strings.Builder
+		ok bool
+	)
+	for i < len(str) {
+		char, z := utf8.DecodeRuneInString(str[i:])
+		if char == utf8.RuneError {
+			break
+		}
+		if multi && char == dquote {
+			i += z
+			b.WriteRune(char)
+			if char, z = utf8.DecodeRuneInString(str[i:]); char == dquote {
+				i += z
+				b.WriteRune(char)
+				char, z = utf8.DecodeRuneInString(str[i:])
+			}
+		}
+		if char, ok = escape(char); ok {
+			b.WriteRune(backslash)
+		}
+		b.WriteRune(char)
+		i += z
+	}
+	return b.String()
 }
 
 func (f *Formatter) convertValue(tok Token) (string, error) {
@@ -529,6 +626,10 @@ func longestKey(options []*Option) int {
 		}
 	}
 	return length
+}
+
+func formatString(str string) string {
+	return str
 }
 
 func formatTime(pattern string, utc bool) func(string) (string, error) {

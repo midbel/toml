@@ -9,6 +9,10 @@ const (
 	TokNL
 	TokIdent
 	TokString
+	TokBasic
+	TokLiteral
+	TokBasicMulti
+	TokLiteralMulti
 	TokInteger
 	TokFloat
 	TokBool
@@ -90,7 +94,7 @@ func (t Token) isTable() bool {
 
 func (t Token) IsIdent() bool {
 	switch t.Type {
-	case TokIdent, TokString, TokInteger:
+	case TokIdent, TokString, TokBasic, TokLiteral, TokInteger:
 		return true
 	default:
 		return false
@@ -99,7 +103,18 @@ func (t Token) IsIdent() bool {
 
 func (t Token) isValue() bool {
 	switch t.Type {
-	case TokString, TokInteger, TokFloat, TokBool, TokDate, TokTime, TokDatetime:
+	case TokInteger, TokFloat, TokBool, TokDate, TokTime, TokDatetime:
+		return true
+	case TokString, TokBasic, TokLiteral, TokBasicMulti, TokLiteralMulti:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t Token) isString() bool {
+	switch t.Type {
+	case TokString, TokBasic, TokLiteral, TokBasicMulti, TokLiteralMulti:
 		return true
 	default:
 		return false
@@ -129,7 +144,7 @@ func (t Token) String() string {
 		return "<nl>"
 	case TokIdent:
 		prefix = "ident"
-	case TokString:
+	case TokString, TokBasic, TokLiteral, TokBasicMulti, TokLiteralMulti:
 		prefix = "string"
 	case TokInteger:
 		prefix = "integer"

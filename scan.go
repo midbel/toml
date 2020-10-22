@@ -328,11 +328,24 @@ func scanString(s *Scanner) {
 	var (
 		quote = s.char
 		multi bool
+		kind  rune
 	)
 	s.readRune()
 	if multi = s.char == quote && s.nextRune() == quote; multi {
 		s.skipN(2, isQuote)
 		s.skip(func(r rune) bool { return isBlank(r) || isNL(r) })
+	}
+	switch {
+	case !multi && quote == dquote:
+		kind = TokBasic
+	case multi && quote == dquote:
+		kind = TokBasicMulti
+	case !multi && quote == squote:
+		kind = TokLiteral
+	case multi && quote == squote:
+		kind = TokLiteralMulti
+	default:
+		kind = TokString
 	}
 	for !s.isDone() {
 		if s.char == quote {
@@ -362,7 +375,6 @@ func scanString(s *Scanner) {
 		s.writeRune(s.char)
 		s.readRune()
 	}
-	kind := TokString
 	if s.isDone() {
 		kind = TokIllegal
 	}

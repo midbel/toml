@@ -153,7 +153,7 @@ func decodeLiteral(i *Literal, e reflect.Value) error {
 	switch str := i.token.Literal; i.token.Type {
 	default:
 		err = fmt.Errorf("literal: unexpected token type: %s", i.token)
-	case TokString:
+	case TokBasic, TokLiteral, TokBasicMulti, TokLiteralMulti:
 		err = decodeString(e, str)
 	case TokBool:
 		err = decodeBool(e, str)
