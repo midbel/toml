@@ -358,13 +358,13 @@ func (f *Formatter) formatString(tok Token) {
 	}
 	str := escapeString(tok.Literal, isMulti, escape)
 	if isMulti && strings.IndexByte(str, newline) < 0 {
-		str = splitString(str)
+		str = textWrap(str)
 	}
 	f.writer.WriteString(str)
 	f.writer.WriteString(quoting)
 }
 
-func splitString(str string) string {
+func textWrap(str string) string {
 	var (
 		scan = bufio.NewScanner(strings.NewReader(str))
 		buf strings.Builder
@@ -379,7 +379,7 @@ func splitString(str string) string {
 		}
 		var i, j int
 		for i < length {
-			x := bytes.IndexAny(data[i:], " \t")
+			x := bytes.IndexAny(data[i:], " \t.?,!;")
 			if x < 0 {
 				return 0, nil, nil
 			}
