@@ -340,8 +340,51 @@ func (f *Formatter) formatString(tok Token) {
 	if isMulti {
 		f.endLine()
 	}
-	f.writer.WriteString(escapeString(tok.Literal, isMulti, escape))
+	str := escapeString(tok.Literal, isMulti, escape)
+	fmt.Println(str, isMulti, strings.IndexByte(str, newline))
+	if isMulti && strings.IndexByte(str, newline) < 0 {
+		str = splitString(str)
+	}
+	f.writer.WriteString(str)
 	f.writer.WriteString(quoting)
+}
+
+func splitString(str string) string {
+	var (
+		scan = bufio.NewScanner(strings.NewReader(str))
+		buf strings.Builder
+	)
+	const (
+		length = 72
+		limit  = 8
+	)
+	scan.Split(func(data []byte, ateof bool) (int, []byte, error) {
+		if ateof {
+			return len(data), data, bufio.ErrFinalToken
+		}
+		var i, j int
+		for i < length {
+			x := bytes.IndexAny(data[i:], " \t")
+			if x < 0 {
+				return 0, nil, nil
+			}
+			j, i = i, i+x+1
+		}
+		if i >= length + limit {
+			i = j
+		}
+		return i, data[:i], nil
+	})
+	scan.Scan()
+	for {
+		buf.WriteString(scan.Text())
+		if !scan.Scan() {
+			break
+		}
+		buf.WriteRune(backslash)
+		buf.WriteRune(newline)
+	}
+	return buf.String()
 }
 
 func escapeBasic(r rune) (rune, bool) {
