@@ -169,7 +169,7 @@ func (s *Scanner) emit(kind rune) {
 	defer s.buf.Reset()
 	s.queue <- Token{
 		Literal: s.literal(),
-		Raw:     string(s.input[s.where.beg:s.next]),
+		Raw:     string(s.input[s.where.beg:s.pos]),
 		Type:    kind,
 		Pos:     s.where.pos,
 	}

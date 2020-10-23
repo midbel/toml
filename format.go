@@ -318,10 +318,10 @@ func (f *Formatter) formatValue(n Node) error {
 	var err error
 	switch n := n.(type) {
 	case *Literal:
-		// if f.withRaw {
-		// 	f.writer.WriteString(n.token.Raw)
-		// 	return nil
-		// }
+		if f.withRaw {
+			f.writer.WriteString(n.token.Raw)
+			break
+		}
 		err = f.formatLiteral(n)
 	case *Array:
 		err = f.formatArray(n)
