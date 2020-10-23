@@ -10,10 +10,36 @@ import (
 	"github.com/midbel/toml"
 )
 
+const help = `tomlfmt re writes a toml document.
+
+options:
+
+  -a  FMT   rewrite array(s) according to FMT
+  -d  FMT   use FMT as base when rewritting integers
+  -e  EOL   use EOL when writting the end of line
+  -f  FMT   use FMT to rewrite floats
+  -g        use UTC time for datetime values
+  -h        print this help message and exit
+  -i        rewrite (array of) inline table(s) to (array of) regular table(s)
+  -k        keep empty table(s) when rewritting document
+  -m  PREC  use PREC as millisecond precision for datetime values
+  -n        nest sub tables with indentation
+  -o        remove comments from document
+  -r        keep raw values
+  -s  SPACE use SPACE space(s) as indent instead of tab
+  -u  NUM   insert underscore in number (integer/float) every NUM characters
+  -w        overwrite source file
+`
+
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stdout, help)
+		os.Exit(2)
+	}
 	var (
 		overwrite = flag.Bool("w", false, "overwrite document")
 		// general option
+		raw   = flag.Bool("r", false, "keep raw values")
 		keep  = flag.Bool("k", false, "keep empty table(s)")
 		nest  = flag.Bool("n", false, "nest sub table(s)")
 		space = flag.Int("s", 0, "use space for indentation instead of tab")
@@ -42,6 +68,7 @@ func main() {
 		toml.WithArray(*array),
 		toml.WithInline(*inline),
 		toml.WithEOL(*eol),
+		toml.WithRaw(*raw),
 	}
 	for _, a := range flag.Args() {
 		if err := formatDocument(a, *overwrite, rules); err != nil {

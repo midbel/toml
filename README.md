@@ -110,6 +110,10 @@ Some of its options are:
 * keep format of values from original document
 * choose indentation type (tab by default, number of space)
 
+By default, the command will always re align the key to all have the same width.
+
+Unless specified, the command will output the "rewritten" document to stdout. Specified the -w to "replace" the source document with its rewritten version.
+
 to use it:
 
 ```bash

@@ -44,6 +44,13 @@ func WithComment(with bool) FormatRule {
 	}
 }
 
+func WithRaw(with bool) FormatRule {
+	return func(ft *Formatter) error {
+		ft.withRaw = with
+		return nil
+	}
+}
+
 func WithInline(inline bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withInline = inline
@@ -159,6 +166,7 @@ type Formatter struct {
 	withComment bool
 	withNest    bool
 	currLevel   int
+	withRaw     bool
 }
 
 func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
@@ -176,6 +184,7 @@ func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 		withComment: true,
 		withTab:     "\t",
 		withEOL:     "\n",
+		withRaw:     false,
 	}
 
 	buf, err := ioutil.ReadFile(doc)
@@ -309,6 +318,10 @@ func (f *Formatter) formatValue(n Node) error {
 	var err error
 	switch n := n.(type) {
 	case *Literal:
+		// if f.withRaw {
+		// 	f.writer.WriteString(n.token.Raw)
+		// 	return nil
+		// }
 		err = f.formatLiteral(n)
 	case *Array:
 		err = f.formatArray(n)

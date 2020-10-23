@@ -57,7 +57,10 @@ type Scanner struct {
 	line   int
 	column int
 
-	cursor Position
+	where struct {
+		pos Position
+		beg int
+	}
 
 	queue chan Token
 }
@@ -90,10 +93,11 @@ func (s *Scanner) Scan() Token {
 }
 
 func (s *Scanner) backup() {
-	s.cursor = Position{
+	s.where.pos = Position{
 		Line:   s.line,
 		Column: s.column,
 	}
+	s.where.beg = s.pos
 }
 
 func (s *Scanner) scan() {
@@ -165,8 +169,9 @@ func (s *Scanner) emit(kind rune) {
 	defer s.buf.Reset()
 	s.queue <- Token{
 		Literal: s.literal(),
+		Raw:     string(s.input[s.where.beg:s.next]),
 		Type:    kind,
-		Pos:     s.cursor,
+		Pos:     s.where.pos,
 	}
 }
 

@@ -72,6 +72,7 @@ func (p Position) Less(other Position) bool {
 
 type Token struct {
 	Literal string
+	Raw     string
 	Type    rune
 	Pos     Position
 }
