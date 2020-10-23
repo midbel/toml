@@ -82,6 +82,16 @@ it can then be decoded with:
     }
     // use cfg
   }
+
+  // or
+  func loadConfig (file string) (map[string]interface{}, error) {
+    // without opening the file
+    var doc map[string]interface{}
+    if err := toml.DecodeFile(file, &doc); err != nil {
+      return nil, err
+    }
+    return doc, nil
+  }
 ```
 
 ### Commands
