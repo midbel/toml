@@ -29,6 +29,32 @@ options:
   -s  SPACE use SPACE space(s) as indent instead of tab
   -u  NUM   insert underscore in number (integer/float) every NUM characters
   -w        overwrite source file
+
+Array format:
+
+* multi: force arrays to be written on multiple lines (except for arrays with
+less that 2 elements)
+* single: force arrays to be written on a single line
+* mixed (default): arrays will be written as they are in the original document.
+
+Integer base:
+
+* x, hex: all integers will be written in hexadecimal
+* o, oct: all integers will be written in octal
+* b, bin: all integers will be written in binary
+* d, dec (default): all integers will be written in decimal
+
+Float format:
+
+* f: floats will be written in normal notation without exponent
+* e: floats will be written in scientific notation
+* g: floats will be written, depending of their values, to normal or scientific notation
+
+End of Line:
+
+* lf: use line feed as end of line terminator
+* crlf: use carriage return, line feed as end of line terminator
+
 `
 
 func main() {
