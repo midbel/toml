@@ -367,7 +367,7 @@ func (f *Formatter) formatString(tok Token) {
 func textWrap(str string) string {
 	var (
 		scan = bufio.NewScanner(strings.NewReader(str))
-		buf strings.Builder
+		buf  strings.Builder
 	)
 	const (
 		length = 72
@@ -385,7 +385,7 @@ func textWrap(str string) string {
 			}
 			j, i = i, i+x+1
 		}
-		if i >= length + limit {
+		if i >= length+limit {
 			i = j
 		}
 		return i, data[:i], nil
