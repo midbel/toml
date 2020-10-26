@@ -1,0 +1,22 @@
+use-space   = 0
+no-comment  = false
+end-of-line = "lf"
+
+[table]
+keep-empty     = false
+indent-table   = true
+array-format   = ""
+inline-regular = false
+
+[value]
+keep-raw = false
+
+[number]
+float      = "f"
+integer    = "dec"
+underscore = 3
+
+[time]
+utc    = false
+millis = 3
+
