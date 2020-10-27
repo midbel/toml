@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+// Decode a TOML document from the given file and writes the decode values into v.
+// See Decode for more information about the decoding process.
 func DecodeFile(file string, v interface{}) error {
 	r, err := os.Open(file)
 	if err != nil {
@@ -20,6 +22,7 @@ func DecodeFile(file string, v interface{}) error {
 	return Decode(r, v)
 }
 
+// Decode a TOML document from r and writes the decoded values into v.
 func Decode(r io.Reader, v interface{}) error {
 	n, err := Parse(r)
 	if err != nil {

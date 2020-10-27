@@ -14,6 +14,8 @@ import (
 
 type FormatRule func(*Formatter) error
 
+// Set the character to indent lines. If tab is let to 0, tab character will
+// be used otherwise one or multiple space(s)
 func WithTab(tab int) FormatRule {
 	return func(ft *Formatter) error {
 		if tab >= 1 {
@@ -23,6 +25,7 @@ func WithTab(tab int) FormatRule {
 	}
 }
 
+// Tell the formatter to keep empty table when rewritting the document.
 func WithEmpty(with bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withEmpty = with
@@ -30,6 +33,8 @@ func WithEmpty(with bool) FormatRule {
 	}
 }
 
+// Tell the formatter to indent nested sub table(s). If not set, all tables will
+// be aligned.
 func WithNest(with bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withNest = with
@@ -37,6 +42,7 @@ func WithNest(with bool) FormatRule {
 	}
 }
 
+// Tell the formatter to keep comments from the original document when rewritting.
 func WithComment(with bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withComment = with
@@ -44,6 +50,9 @@ func WithComment(with bool) FormatRule {
 	}
 }
 
+// Tell the formatter to keep the format of the values as found in the original
+// document.
+// Using this option disables other options that format values.
 func WithRaw(with bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withRaw = with
@@ -51,6 +60,7 @@ func WithRaw(with bool) FormatRule {
 	}
 }
 
+// Tell the formatter to reformat (array of) inline table(s) to (array of) regular table(s)
 func WithInline(inline bool) FormatRule {
 	return func(ft *Formatter) error {
 		ft.withInline = inline
@@ -58,6 +68,8 @@ func WithInline(inline bool) FormatRule {
 	}
 }
 
+// Tell the formatter how to reformat arrays. By default, array with 0 or 1 element
+// will always be written on the same line.
 func WithArray(format string) FormatRule {
 	return func(ft *Formatter) error {
 		switch strings.ToLower(format) {
@@ -74,6 +86,8 @@ func WithArray(format string) FormatRule {
 	}
 }
 
+// Tell the formatter to use the precision of millisecond to use and if it is needed
+// to convert offset datetime to UTC.
 func WithTime(millis int, utc bool) FormatRule {
 	return func(ft *Formatter) error {
 		if millis > 9 {
@@ -89,6 +103,8 @@ func WithTime(millis int, utc bool) FormatRule {
 	}
 }
 
+// Tell the formatter how to format floating point number and where to write an
+// underscore to make it more readable (if needed)
 func WithFloat(format string, underscore int) FormatRule {
 	return func(ft *Formatter) error {
 		var spec byte
@@ -107,6 +123,8 @@ func WithFloat(format string, underscore int) FormatRule {
 	}
 }
 
+// Tell the formatter which base to use to rewrite integer number and where to write
+// an underscore to make it more readable (if needed)
 func WithNumber(format string, underscore int) FormatRule {
 	return func(ft *Formatter) error {
 		var (
@@ -130,6 +148,7 @@ func WithNumber(format string, underscore int) FormatRule {
 	}
 }
 
+// Tell the formatter which sequence of character to use to write the end of line.
 func WithEOL(format string) FormatRule {
 	return func(ft *Formatter) error {
 		switch strings.ToLower(format) {
@@ -150,6 +169,8 @@ const (
 	arrayMulti
 )
 
+// Formatter is responsible to rewrite a TOML document according to the settings
+// given by user.
 type Formatter struct {
 	doc    Node
 	writer *bufio.Writer
@@ -169,6 +190,8 @@ type Formatter struct {
 	withRaw     bool
 }
 
+// Create a new Formatter that will rewrite the TOML document doc according to the
+// rules specify.
 func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 	identity := func(str string) (string, error) {
 		return str, nil
@@ -203,6 +226,7 @@ func NewFormatter(doc string, rules ...FormatRule) (*Formatter, error) {
 	return &f, nil
 }
 
+// Reformat the document
 func (f *Formatter) Format(w io.Writer) error {
 	f.writer = bufio.NewWriter(w)
 	root, ok := f.doc.(*Table)

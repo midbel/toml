@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// Dump the given Node to stdout.
 func Dump(n Node) {
 	dumpNode(n, 0)
 }
