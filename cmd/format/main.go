@@ -16,7 +16,7 @@ options:
 
   -a  FMT   rewrite array(s) according to FMT
   -d  FMT   use FMT as base when rewritting integers
-  -e  EOL   use EOL when writting the end of line
+  -e  EOL   use EOL when writing the end of line
   -f  FMT   use FMT to rewrite floats
   -g        use UTC time for datetime values
   -h        print this help message and exit

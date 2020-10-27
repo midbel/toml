@@ -49,7 +49,7 @@ func TestDecode(t *testing.T) {
 	t.Run("map", testDecodeMap)
 	t.Run("mix", testDecodeMix)
 	t.Run("mapalt", testDecodeMapAlt)
-	t.Run("embeded", testDecodeEmbededTypes)
+	t.Run("embedded", testDecodeEmbeddedTypes)
 }
 
 func testDecodeMix(t *testing.T) {
@@ -71,7 +71,7 @@ dt3  = 2011-06-11 15:00:00.000123Z
 	}
 }
 
-func testDecodeEmbededTypes(t *testing.T) {
+func testDecodeEmbeddedTypes(t *testing.T) {
 	const sample = `
 [[filter]]
 type = "xlsx"
