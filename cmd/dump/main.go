@@ -8,7 +8,15 @@ import (
 	"github.com/midbel/toml"
 )
 
+var help = `tomldump write the AST of a TOML document to stdout
+
+usage: tomldump <document.toml>`
+
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stdout, help)
+		os.Exit(1)
+	}
 	flag.Parse()
 
 	for i := 0; i < flag.NArg(); i++ {
