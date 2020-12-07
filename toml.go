@@ -136,6 +136,12 @@ func decodeArrayOption(a *Array, e reflect.Value) error {
 	return err
 }
 
+type Setter interface {
+	Set(string) error
+}
+
+var setter = reflect.TypeOf((*Setter)(nil)).Elem()
+
 func decodeOption(o *Option, e reflect.Value) error {
 	var err error
 	switch n := o.value.(type) {
@@ -144,6 +150,15 @@ func decodeOption(o *Option, e reflect.Value) error {
 	case *Table:
 		err = decodeTable(n, e)
 	case *Literal:
+		if e.CanInterface() && e.Type().Implements(setter) {
+			return e.Interface().(Setter).Set(n.token.Literal)
+		}
+		if e.CanAddr() {
+			a := e.Addr()
+			if a.CanInterface() && a.Type().Implements(setter) {
+				return a.Interface().(Setter).Set(n.token.Literal)
+			}
+		}
 		err = decodeLiteral(n, e)
 	default:
 		err = fmt.Errorf("option: unexpected node type %T", n)
