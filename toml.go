@@ -410,6 +410,13 @@ func getFields(v reflect.Value) map[string]reflect.Value {
 			tf  = typ.Field(i)
 			tag string
 		)
+		if tf.Anonymous && tf.Tag.Get("toml") == "" {
+			ms := getFields(f)
+			for k, v := range ms {
+				fs[k] = v
+			}
+			continue
+		}
 		switch tag = tf.Tag.Get("toml"); tag {
 		case "-":
 			continue
