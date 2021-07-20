@@ -309,6 +309,8 @@ func decodeString(e reflect.Value, str string) error {
 	switch k := e.Kind(); {
 	case isString(k):
 		e.SetString(str)
+	case isInt(k) || isUint(k):
+		return decodeInt(e, str)
 	case isInterface(k):
 		e.Set(reflect.ValueOf(str))
 	default:

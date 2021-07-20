@@ -21,23 +21,23 @@ func main() {
 	}
 	defer w.Close()
 
-  if err := save(w, flag.Arg(0)); err != nil {
-    fmt.Fprintln(os.Stderr, err)
-    os.Exit(1)
-  }
+	if err := save(w, flag.Arg(0)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func save(w io.Writer, file string) error {
-  var in interface{}
-  if err := toml.DecodeFile(file, &in); err != nil {
-    return err
-  }
-  e := json.NewEncoder(w)
-  e.SetIndent("", "  ")
-  return e.Encode(in)
+	var in interface{}
+	if err := toml.DecodeFile(file, &in); err != nil {
+		return err
+	}
+	e := json.NewEncoder(w)
+	e.SetIndent("", "  ")
+	return e.Encode(in)
 }
 
 func getFile(file string) string {
-  file = strings.TrimRight(filepath.Ext(file))
-  return file + ".json"
+	file = strings.TrimRight(filepath.Ext(file))
+	return file + ".json"
 }
