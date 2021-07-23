@@ -180,12 +180,11 @@ func decodeLiteral(i *Literal, e reflect.Value) error {
 	case TokFloat:
 		err = decodeFloat(e, str)
 	case TokDatetime:
-		patterns := makeAllPatterns()
-		err = decodeTime(e, str, patterns)
+		err = decodeTime(e, str, makeAllPatterns())
 	case TokDate:
 		err = decodeTime(e, str, []string{dateFormat})
 	case TokTime:
-		// err = decodeTime(e, str)
+		err = decodeTime(e, str, makeTimePatterns())
 	}
 	return err
 }
@@ -529,6 +528,14 @@ var (
 
 func makeAllPatterns() []string {
 	return makePatterns(dtFormat1, dtFormat2)
+}
+
+func makeTimePatterns() []string {
+	return []string{
+		timeFormat,
+		timeFormat + millisPrec,
+		timeFormat + microsPrec,
+	}
 }
 
 func makePatterns(patterns ...string) []string {
