@@ -374,14 +374,14 @@ func decodeStruct(t *Table, e reflect.Value) error {
 		case *Option:
 			f, ok := fields[n.key.Literal]
 			if !ok {
-				err = fmt.Errorf("%s: %w option", ErrUndefined, n.key.Literal)
+				err = fmt.Errorf("%s: %w option", n.key.Literal, ErrUndefined)
 				break
 			}
 			err = decodeOption(n, f)
 		case *Table:
 			f, ok := fields[n.key.Literal]
 			if !ok {
-				err = fmt.Errorf("%s: %w table", ErrUndefined, n.key.Literal)
+				err = fmt.Errorf("%s: %w table", n.key.Literal, ErrUndefined)
 				break
 			}
 			if n.kind == tableArray {
