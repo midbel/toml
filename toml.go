@@ -1,6 +1,7 @@
 package toml
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 )
+
+var ErrUndefined = errors.New("undefined")
 
 // Decode a TOML document from the given file and writes the decode values into v.
 // See Decode for more information about the decoding process.
@@ -371,14 +374,14 @@ func decodeStruct(t *Table, e reflect.Value) error {
 		case *Option:
 			f, ok := fields[n.key.Literal]
 			if !ok {
-				err = fmt.Errorf("%s: invalid option", n.key.Literal)
+				err = fmt.Errorf("%s: %w option", ErrUndefined, n.key.Literal)
 				break
 			}
 			err = decodeOption(n, f)
 		case *Table:
 			f, ok := fields[n.key.Literal]
 			if !ok {
-				err = fmt.Errorf("%s: invalid table", n.key.Literal)
+				err = fmt.Errorf("%s: %w table", ErrUndefined, n.key.Literal)
 				break
 			}
 			if n.kind == tableArray {
