@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,6 @@ func save(w io.Writer, file string) error {
 }
 
 func getFile(file string) string {
-	file = strings.TrimRight(filepath.Ext(file))
+	file = strings.TrimRight(file, filepath.Ext(file))
 	return file + ".json"
 }
